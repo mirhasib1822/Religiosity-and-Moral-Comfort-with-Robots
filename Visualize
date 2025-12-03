@@ -1,0 +1,840 @@
+# =============================================================================
+# SEM RESULTS VISUALIZATION AND REPORTING
+# =============================================================================
+
+cat("\n", rep("=", 70), sep="")
+cat("\nVISUALIZATION AND REPORTING OF SEM RESULTS")
+cat("\n", rep("=", 70), "\n", sep="")
+
+# Try to install updated packages, but have fallback options
+tryCatch({
+  # Update systemfonts package
+  if(packageVersion("systemfonts") < "1.3.0") {
+    cat("Updating systemfonts package...\n")
+    install.packages("systemfonts", dependencies = TRUE)
+  }
+}, error = function(e) {
+  cat("Could not update systemfonts package. Using alternative methods.\n")
+})
+
+# Load available packages (use fallbacks if needed)
+if(require("ggplot2")) {
+  cat("ggplot2 loaded successfully\n")
+} else {
+  install.packages("ggplot2")
+  library(ggplot2)
+}
+
+# Use base R functions instead of kableExtra for tables
+cat("\n=== 6.1 COMPREHENSIVE SEM RESULTS TABLE ===\n")
+
+# Extract all parameter estimates
+sem_params_complete <- parameterEstimates(fit_sem, standardized = TRUE)
+
+# -----------------------------------------------------------------------------
+# 6.1.1 MEASUREMENT MODEL TABLE (using base R)
+# -----------------------------------------------------------------------------
+measurement_table <- sem_params_complete %>%
+  filter(op == "=~") %>%
+  mutate(
+    Construct = lhs,
+    Item = rhs,
+    Unstandardized = round(est, 3),
+    SE = round(se, 3),
+    Z = round(z, 2),
+    `Std. Loading` = round(std.all, 3),
+    p = pvalue,
+    Significance = ifelse(p < 0.001, "***",
+                         ifelse(p < 0.01, "**",
+                                ifelse(p < 0.05, "*", "")))
+  ) %>%
+  select(Construct, Item, Unstandardized, SE, Z, `Std. Loading`, Significance)
+
+cat("\n--- Table 1: Measurement Model (Factor Loadings) ---\n")
+print(measurement_table)
+
+# Save to CSV
+write.csv(measurement_table, "SEM_Measurement_Model.csv", row.names = FALSE)
+cat("\nMeasurement model saved to 'SEM_Measurement_Model.csv'\n")
+
+# -----------------------------------------------------------------------------
+# 6.1.2 STRUCTURAL PATH TABLE
+# -----------------------------------------------------------------------------
+structural_table <- sem_params_complete %>%
+  filter(op == "~") %>%
+  mutate(
+    From = rhs,
+    To = lhs,
+    Unstandardized = round(est, 3),
+    SE = round(se, 3),
+    Z = round(z, 2),
+    `Std. Beta` = round(std.all, 3),
+    p = pvalue,
+    Significance = ifelse(p < 0.001, "***",
+                         ifelse(p < 0.01, "**",
+                                ifelse(p < 0.05, "*", "")))
+  ) %>%
+  select(From, To, Unstandardized, SE, Z, `Std. Beta`, Significance)
+
+cat("\n--- Table 2: Structural Path Coefficients ---\n")
+print(structural_table)
+
+# Save to CSV
+write.csv(structural_table, "SEM_Structural_Paths.csv", row.names = FALSE)
+cat("\nStructural paths saved to 'SEM_Structural_Paths.csv'\n")
+
+# -----------------------------------------------------------------------------
+# 6.1.3 INDIRECT EFFECTS TABLE
+# -----------------------------------------------------------------------------
+indirect_table <- sem_params_complete %>%
+  filter(op == ":=") %>%
+  mutate(
+    Effect = lhs,
+    Estimate = round(est, 3),
+    SE = round(se, 3),
+    Z = round(z, 2),
+    `Std. Estimate` = round(std.all, 3),
+    p = pvalue,
+    Significance = ifelse(p < 0.001, "***",
+                         ifelse(p < 0.01, "**",
+                                ifelse(p < 0.05, "*", "")))
+  ) %>%
+  select(Effect, Estimate, SE, Z, `Std. Estimate`, Significance)
+
+cat("\n--- Table 3: Indirect Effects ---\n")
+print(indirect_table)
+
+# Save to CSV
+write.csv(indirect_table, "SEM_Indirect_Effects.csv", row.names = FALSE)
+cat("\nIndirect effects saved to 'SEM_Indirect_Effects.csv'\n")
+
+# -----------------------------------------------------------------------------
+# 6.2 MODEL FIT SUMMARY (simple version)
+# -----------------------------------------------------------------------------
+cat("\n=== 6.2 MODEL FIT SUMMARY ===\n")
+
+# Extract fit indices
+fit_summary <- fitMeasures(fit_sem, 
+                           c("chisq", "df", "pvalue", 
+                             "cfi", "tli", "rmsea", "rmsea.ci.lower", 
+                             "rmsea.ci.upper", "srmr", "aic", "bic"))
+
+# Create simple fit indices table
+fit_table <- data.frame(
+  Index = c("Chi-square", "Degrees of freedom", "p-value", 
+            "CFI", "TLI", "RMSEA", "RMSEA 90% CI Lower", 
+            "RMSEA 90% CI Upper", "SRMR", "AIC", "BIC"),
+  Value = c(round(fit_summary["chisq"], 2),
+            round(fit_summary["df"], 0),
+            format.pval(fit_summary["pvalue"], digits = 3),
+            round(fit_summary["cfi"], 3),
+            round(fit_summary["tli"], 3),
+            round(fit_summary["rmsea"], 3),
+            round(fit_summary["rmsea.ci.lower"], 3),
+            round(fit_summary["rmsea.ci.upper"], 3),
+            round(fit_summary["srmr"], 3),
+            round(fit_summary["aic"], 2),
+            round(fit_summary["bic"], 2))
+)
+
+cat("\n--- Model Fit Indices ---\n")
+print(fit_table)
+
+# Save to CSV
+write.csv(fit_table, "SEM_Fit_Indices.csv", row.names = FALSE)
+cat("\nFit indices saved to 'SEM_Fit_Indices.csv'\n")
+
+# -----------------------------------------------------------------------------
+# 6.3 PATH DIAGRAM VISUALIZATION
+# -----------------------------------------------------------------------------
+cat("\n=== 6.3 PATH DIAGRAM VISUALIZATION ===\n")
+
+# Create enhanced SEM diagram
+create_sem_path_diagram <- function() {
+  
+  # Create node data
+  nodes <- data.frame(
+    id = c("IR", "Anthro_Animacy1", "Anthro_Animacy2", "Likeability",
+           "Disgust1", "Disgust2", "Disgust3", "RobotNegative"),
+    label = c("Intrinsic\nReligiosity", "Anthro/\nAnimacy 1", "Anthro/\nAnimacy 2", 
+              "Likeability", "Disgust\nFactor 1", "Disgust\nFactor 2", 
+              "Disgust\nFactor 3", "Negative\nPerceptions"),
+    type = c("exogenous", "mediator", "mediator", "mediator", 
+             "mediator", "mediator", "mediator", "endogenous"),
+    x = c(1, 2, 2, 2, 2, 2, 2, 3),
+    y = c(3.5, 4.5, 3.5, 2.5, 5.5, 4.5, 3.5, 3.5)
+  )
+  
+  # Create plot
+  p <- ggplot() +
+    # Add nodes with different shapes for different types
+    geom_point(data = nodes, aes(x = x, y = y, shape = type, color = type), 
+               size = 15, alpha = 0.8) +
+    geom_text(data = nodes, aes(x = x, y = y, label = label), 
+              size = 3, fontface = "bold", color = "black") +
+    
+    # Add path arrows (anthropomorphism pathway in blue)
+    geom_segment(aes(x = 1.2, y = 3.5, xend = 1.8, yend = 4.5), 
+                 arrow = arrow(length = unit(0.2, "cm")), 
+                 size = 1, color = "#1f77b4", alpha = 0.7) +
+    geom_segment(aes(x = 1.2, y = 3.5, xend = 1.8, yend = 3.5), 
+                 arrow = arrow(length = unit(0.2, "cm")), 
+                 size = 1, color = "#1f77b4", alpha = 0.7) +
+    geom_segment(aes(x = 1.2, y = 3.5, xend = 1.8, yend = 2.5), 
+                 arrow = arrow(length = unit(0.2, "cm")), 
+                 size = 1, color = "#1f77b4", alpha = 0.7) +
+    
+    # Disgust pathway (in red)
+    geom_segment(aes(x = 1.2, y = 3.5, xend = 1.8, yend = 5.5), 
+                 arrow = arrow(length = unit(0.2, "cm")), 
+                 size = 1, color = "#d62728", alpha = 0.7) +
+    geom_segment(aes(x = 1.2, y = 3.5, xend = 1.8, yend = 4.5), 
+                 arrow = arrow(length = unit(0.2, "cm")), 
+                 size = 1, color = "#d62728", alpha = 0.7) +
+    geom_segment(aes(x = 1.2, y = 3.5, xend = 1.8, yend = 3.5), 
+                 arrow = arrow(length = unit(0.2, "cm")), 
+                 size = 1, color = "#d62728", alpha = 0.7) +
+    
+    # Mediator to outcome paths
+    geom_segment(aes(x = 2.2, y = 4.5, xend = 2.8, yend = 3.5), 
+                 arrow = arrow(length = unit(0.2, "cm")), 
+                 size = 1, color = "#2ca02c", alpha = 0.7) +
+    geom_segment(aes(x = 2.2, y = 3.5, xend = 2.8, yend = 3.5), 
+                 arrow = arrow(length = unit(0.2, "cm")), 
+                 size = 1, color = "#2ca02c", alpha = 0.7) +
+    geom_segment(aes(x = 2.2, y = 2.5, xend = 2.8, yend = 3.5), 
+                 arrow = arrow(length = unit(0.2, "cm")), 
+                 size = 1, color = "#2ca02c", alpha = 0.7) +
+    geom_segment(aes(x = 2.2, y = 5.5, xend = 2.8, yend = 3.5), 
+                 arrow = arrow(length = unit(0.2, "cm")), 
+                 size = 1, color = "#ff7f0e", alpha = 0.7) +
+    geom_segment(aes(x = 2.2, y = 4.5, xend = 2.8, yend = 3.5), 
+                 arrow = arrow(length = unit(0.2, "cm")), 
+                 size = 1, color = "#ff7f0e", alpha = 0.7) +
+    geom_segment(aes(x = 2.2, y = 3.5, xend = 2.8, yend = 3.5), 
+                 arrow = arrow(length = unit(0.2, "cm")), 
+                 size = 1, color = "#ff7f0e", alpha = 0.7) +
+    
+    # Add legend
+    annotate("text", x = 0.8, y = 6, label = "Pathway Legend:", hjust = 0, fontface = "bold", size = 4) +
+    annotate("text", x = 0.8, y = 5.8, label = "Blue: IR → Anthropomorphism", hjust = 0, color = "#1f77b4", size = 3.5) +
+    annotate("text", x = 0.8, y = 5.6, label = "Red: IR → Disgust", hjust = 0, color = "#d62728", size = 3.5) +
+    annotate("text", x = 0.8, y = 5.4, label = "Green: Anthropomorphism → Outcome", hjust = 0, color = "#2ca02c", size = 3.5) +
+    annotate("text", x = 0.8, y = 5.2, label = "Orange: Disgust → Outcome", hjust = 0, color = "#ff7f0e", size = 3.5) +
+    
+    # Customize shapes and colors
+    scale_shape_manual(values = c("exogenous" = 15, "mediator" = 16, "endogenous" = 17)) +
+    scale_color_manual(values = c("exogenous" = "#9467bd", "mediator" = "#8c564b", "endogenous" = "#e377c2")) +
+    
+    # Set theme and labels
+    theme_void() +
+    theme(
+      legend.position = "none",
+      plot.title = element_text(hjust = 0.5, face = "bold", size = 16),
+      plot.subtitle = element_text(hjust = 0.5, size = 12)
+    ) +
+    labs(title = "Dual-Path Structural Equation Model",
+         subtitle = "Religiosity → Anthropomorphism/Disgust → Negative Robot Perceptions") +
+    xlim(0.5, 3.5) +
+    ylim(2, 6.5)
+  
+  return(p)
+}
+
+# Generate and save path diagram
+cat("Creating SEM path diagram...\n")
+sem_diagram <- create_sem_path_diagram()
+print(sem_diagram)
+ggsave("SEM_Path_Diagram.png", sem_diagram, width = 12, height = 10, dpi = 300)
+cat("Path diagram saved to 'SEM_Path_Diagram.png'\n")
+
+# -----------------------------------------------------------------------------
+# 6.4 SIMPLE COEFFICIENT PLOT (without complex packages)
+# -----------------------------------------------------------------------------
+cat("\n=== 6.4 SIMPLE COEFFICIENT PLOT ===\n")
+
+create_simple_coefficient_plot <- function() {
+  # Prepare data for coefficient plot
+  coef_data <- sem_params_complete %>%
+    filter(op == "~") %>%
+    mutate(
+      Path = paste(rhs, "→", lhs),
+      Significance = ifelse(pvalue < 0.001, "p < .001",
+                           ifelse(pvalue < 0.01, "p < .01",
+                                  ifelse(pvalue < 0.05, "p < .05", "ns")))
+    ) %>%
+    arrange(std.all)
+  
+  # Create simple coefficient plot
+  p <- ggplot(coef_data, aes(x = std.all, y = reorder(Path, std.all))) +
+    geom_col(aes(fill = ifelse(std.all > 0, "Positive", "Negative")), width = 0.6) +
+    geom_text(aes(label = round(std.all, 3)), 
+              hjust = ifelse(coef_data$std.all >= 0, -0.2, 1.2), 
+              size = 3.5) +
+    geom_vline(xintercept = 0, linetype = "dashed", color = "gray50") +
+    scale_fill_manual(values = c("Positive" = "#d62728", "Negative" = "#1f77b4")) +
+    labs(title = "Standardized Path Coefficients",
+         subtitle = "Dual-Path Model Structural Relationships",
+         x = "Standardized Beta Coefficient",
+         y = "Structural Path") +
+    theme_minimal() +
+    theme(
+      legend.position = "none",
+      plot.title = element_text(hjust = 0.5, face = "bold", size = 14),
+      plot.subtitle = element_text(hjust = 0.5, size = 12),
+      axis.text.y = element_text(size = 10),
+      panel.grid.major = element_line(color = "gray90"),
+      panel.grid.minor = element_blank()
+    ) +
+    xlim(min(coef_data$std.all) * 1.3, max(coef_data$std.all) * 1.3)
+  
+  return(p)
+}
+
+coef_plot <- create_simple_coefficient_plot()
+print(coef_plot)
+ggsave("SEM_Coefficient_Plot.png", coef_plot, width = 10, height = 8, dpi = 300)
+cat("Coefficient plot saved to 'SEM_Coefficient_Plot.png'\n")
+
+# -----------------------------------------------------------------------------
+# 6.5 INDIRECT EFFECTS VISUALIZATION
+# -----------------------------------------------------------------------------
+cat("\n=== 6.5 INDIRECT EFFECTS VISUALIZATION ===\n")
+
+create_simple_indirect_plot <- function() {
+  # Extract indirect effects
+  indirect_data <- sem_params_complete %>%
+    filter(op == ":=") %>%
+    mutate(
+      Effect_Type = case_when(
+        grepl("disgust", lhs, ignore.case = TRUE) ~ "Disgust Pathway",
+        grepl("anthro", lhs, ignore.case = TRUE) ~ "Anthropomorphism Pathway",
+        grepl("total", lhs, ignore.case = TRUE) ~ "Total",
+        TRUE ~ "Other"
+      )
+    )
+  
+  # Create simple indirect effects plot
+  p <- ggplot(indirect_data, aes(x = est, y = reorder(lhs, est), fill = Effect_Type)) +
+    geom_col(width = 0.6) +
+    geom_text(aes(label = round(est, 3)), 
+              hjust = ifelse(indirect_data$est >= 0, -0.2, 1.2), 
+              size = 3.5) +
+    scale_fill_manual(values = c("Disgust Pathway" = "#d62728", 
+                                 "Anthropomorphism Pathway" = "#1f77b4",
+                                 "Total" = "#2ca02c",
+                                 "Other" = "#9467bd")) +
+    labs(title = "Indirect Effects in Dual-Path Model",
+         subtitle = "Mediation Effects of Anthropomorphism and Disgust",
+         x = "Indirect Effect Size",
+         y = "Effect") +
+    theme_minimal() +
+    theme(
+      legend.position = "bottom",
+      plot.title = element_text(hjust = 0.5, face = "bold", size = 14),
+      plot.subtitle = element_text(hjust = 0.5, size = 12),
+      axis.text.y = element_text(size = 10),
+      panel.grid.major = element_line(color = "gray90"),
+      panel.grid.minor = element_blank()
+    )
+  
+  return(p)
+}
+
+indirect_plot <- create_simple_indirect_plot()
+print(indirect_plot)
+ggsave("SEM_Indirect_Effects_Plot.png", indirect_plot, width = 10, height = 6, dpi = 300)
+cat("Indirect effects plot saved to 'SEM_Indirect_Effects_Plot.png'\n")
+
+# -----------------------------------------------------------------------------
+# 6.6 R-SQUARED VALUES PLOT
+# -----------------------------------------------------------------------------
+cat("\n=== 6.6 R-SQUARED VALUES PLOT ===\n")
+
+create_rsquared_plot <- function() {
+  # Get R-squared values
+  rsquared_vals <- inspect(fit_sem, "r2")
+  
+  # Prepare data
+  rsquared_data <- data.frame(
+    Variable = names(rsquared_vals),
+    R2 = as.numeric(rsquared_vals),
+    Type = ifelse(names(rsquared_vals) == "RobotNegativePerceptions", 
+                  "Outcome", "Mediator")
+  )
+  
+  # Create R-squared plot
+  p <- ggplot(rsquared_data, aes(x = R2, y = reorder(Variable, R2), fill = Type)) +
+    geom_col(width = 0.6) +
+    geom_text(aes(label = paste0(round(R2 * 100, 1), "%")), 
+              hjust = -0.2, size = 4) +
+    scale_fill_manual(values = c("Outcome" = "#d62728", "Mediator" = "#1f77b4")) +
+    labs(title = "R-squared Values for Endogenous Variables",
+         subtitle = "Proportion of Variance Explained",
+         x = "R-squared",
+         y = "Variable") +
+    theme_minimal() +
+    theme(
+      legend.position = "bottom",
+      plot.title = element_text(hjust = 0.5, face = "bold", size = 14),
+      plot.subtitle = element_text(hjust = 0.5, size = 12),
+      axis.text.y = element_text(size = 10),
+      panel.grid.major = element_line(color = "gray90"),
+      panel.grid.minor = element_blank()
+    ) +
+    xlim(0, max(rsquared_data$R2) * 1.3)
+  
+  return(p)
+}
+
+rsquared_plot <- create_rsquared_plot()
+print(rsquared_plot)
+ggsave("SEM_Rsquared_Plot.png", rsquared_plot, width = 10, height = 6, dpi = 300)
+cat("R-squared plot saved to 'SEM_Rsquared_Plot.png'\n")
+
+# -----------------------------------------------------------------------------
+# 6.7 GENERATE SIMPLE TEXT REPORT
+# -----------------------------------------------------------------------------
+cat("\n=== 6.7 GENERATING SIMPLE SEM REPORT ===\n")
+
+# Function to generate a simple report
+generate_simple_report <- function() {
+  report_file <- "SEM_Analysis_Report.txt"
+  
+  cat("STRUCTURAL EQUATION MODELING ANALYSIS REPORT\n", file = report_file)
+  cat("=============================================\n\n", file = report_file, append = TRUE)
+  
+  cat("Analysis Date:", date(), "\n\n", file = report_file, append = TRUE)
+  
+  cat("MODEL FIT INDICES:\n", file = report_file, append = TRUE)
+  cat("-----------------\n", file = report_file, append = TRUE)
+  for(i in 1:nrow(fit_table)) {
+    cat(sprintf("%-25s: %s\n", fit_table$Index[i], fit_table$Value[i]), 
+        file = report_file, append = TRUE)
+  }
+  
+  cat("\n\nSIGNIFICANT STRUCTURAL PATHS (p < .05):\n", file = report_file, append = TRUE)
+  cat("----------------------------------------\n", file = report_file, append = TRUE)
+  
+  sig_paths <- sem_params_complete %>%
+    filter(op == "~" & pvalue < 0.05)
+  
+  if(nrow(sig_paths) > 0) {
+    for(i in 1:nrow(sig_paths)) {
+      cat(sprintf("%s → %s: β = %.3f, p = %.4f\n",
+                  sig_paths$rhs[i], sig_paths$lhs[i],
+                  sig_paths$std.all[i], sig_paths$pvalue[i]),
+          file = report_file, append = TRUE)
+    }
+  } else {
+    cat("No significant structural paths found.\n", file = report_file, append = TRUE)
+  }
+  
+  cat("\n\nSIGNIFICANT INDIRECT EFFECTS (p < .05):\n", file = report_file, append = TRUE)
+  cat("----------------------------------------\n", file = report_file, append = TRUE)
+  
+  sig_indirect <- sem_params_complete %>%
+    filter(op == ":=" & pvalue < 0.05)
+  
+  if(nrow(sig_indirect) > 0) {
+    for(i in 1:nrow(sig_indirect)) {
+      cat(sprintf("%s: β = %.3f, p = %.4f\n",
+                  sig_indirect$lhs[i],
+                  sig_indirect$std.all[i], sig_indirect$pvalue[i]),
+          file = report_file, append = TRUE)
+    }
+  } else {
+    cat("No significant indirect effects found.\n", file = report_file, append = TRUE)
+  }
+  
+  cat("\n\nR-SQUARED VALUES:\n", file = report_file, append = TRUE)
+  cat("----------------\n", file = report_file, append = TRUE)
+  rsquared_vals <- inspect(fit_sem, "r2")
+  for(i in 1:length(rsquared_vals)) {
+    cat(sprintf("%-30s: R² = %.3f (%.1f%%)\n",
+                names(rsquared_vals)[i],
+                rsquared_vals[i], rsquared_vals[i] * 100),
+        file = report_file, append = TRUE)
+  }
+  
+  cat("\n\nFILES GENERATED:\n", file = report_file, append = TRUE)
+  cat("---------------\n", file = report_file, append = TRUE)
+  cat("1. SEM_Measurement_Model.csv\n", file = report_file, append = TRUE)
+  cat("2. SEM_Structural_Paths.csv\n", file = report_file, append = TRUE)
+  cat("3. SEM_Indirect_Effects.csv\n", file = report_file, append = TRUE)
+  cat("4. SEM_Fit_Indices.csv\n", file = report_file, append = TRUE)
+  cat("5. SEM_Path_Diagram.png\n", file = report_file, append = TRUE)
+  cat("6. SEM_Coefficient_Plot.png\n", file = report_file, append = TRUE)
+  cat("7. SEM_Indirect_Effects_Plot.png\n", file = report_file, append = TRUE)
+  cat("8. SEM_Rsquared_Plot.png\n", file = report_file, append = TRUE)
+  
+  cat("\nSimple report saved to '", report_file, "'\n", sep="")
+}
+
+# Generate the simple report
+generate_simple_report()
+
+# -----------------------------------------------------------------------------
+# SUMMARY
+# -----------------------------------------------------------------------------
+cat("\n", rep("=", 70), sep="")
+cat("\nSEM VISUALIZATION COMPLETED (Simple Version)\n")
+cat(rep("=", 70), "\n")
+
+cat("\nGenerated the following files:\n")
+cat("1. CSV Files for Analysis Results:\n")
+cat("   • SEM_Measurement_Model.csv\n")
+cat("   • SEM_Structural_Paths.csv\n")
+cat("   • SEM_Indirect_Effects.csv\n")
+cat("   • SEM_Fit_Indices.csv\n\n")
+
+cat("2. Visualization Files (PNG):\n")
+cat("   • SEM_Path_Diagram.png - Full model diagram\n")
+cat("   • SEM_Coefficient_Plot.png - Path coefficients\n")
+cat("   • SEM_Indirect_Effects_Plot.png - Mediation effects\n")
+cat("   • SEM_Rsquared_Plot.png - Variance explained\n\n")
+
+cat("3. Comprehensive Report:\n")
+cat("   • SEM_Analysis_Report.txt - Complete analysis summary\n")
+
+cat("\nAll files have been saved to the current working directory.\n")
+cat("These visualizations and tables are suitable for publication and presentation.\n")
+
+# =============================================================================
+# 5. VISUALIZATION OF MULTI-GROUP SEM RESULTS
+# =============================================================================
+
+cat("\n", rep("=", 70), sep="")
+cat("\nVISUALIZATION OF MULTI-GROUP SEM RESULTS")
+cat("\n", rep("=", 70), "\n", sep="")
+
+# Install visualization packages if needed
+if(!require("ggplot2")) install.packages("ggplot2")
+if(!require("semPlot")) install.packages("semPlot")
+if(!require("ggpubr")) install.packages("ggpubr")
+library(ggplot2)
+library(semPlot)
+library(ggpubr)
+
+# -----------------------------------------------------------------------------
+# 5.1 PATH COEFFICIENT COMPARISON ACROSS GROUPS
+# -----------------------------------------------------------------------------
+cat("\n=== Creating Path Coefficient Comparison Plots ===\n")
+
+# Function to extract and organize path coefficients for visualization
+extract_path_coefficients <- function(group_label) {
+  
+  # Simulating data extraction based on your results
+  # In practice, you would extract these from your multi-group model objects
+  
+  if(group_label == "Gender") {
+    data.frame(
+      Group = rep(c("Gender 0", "Gender 1"), each = 6),
+      Path = rep(c("IR → Anthro", "IR → Like", "IR → Disgust",
+                   "Anthro → Neg", "Like → Neg", "Disgust → Neg"), 2),
+      Beta = c(0.588, 0.041, 0.021, 0.142, -0.021, 0.284,
+               0.124, -0.111, 0.000, 0.120, -0.036, 0.354),
+      pvalue = c(0.000, 0.575, 0.012, 0.000, 0.153, 0.066,
+                 0.004, 0.083, 0.953, 0.000, 0.014, 0.019)
+    )
+  } else if(group_label == "Religiosity") {
+    data.frame(
+      Group = rep(c("High Relig", "Low Relig"), each = 6),
+      Path = rep(c("IR → Anthro", "IR → Like", "IR → Disgust",
+                   "Anthro → Neg", "Like → Neg", "Disgust → Neg"), 2),
+      Beta = c(0.677, -0.148, 0.033, 0.124, -0.034, 0.357,
+               -0.430, 0.114, -0.007, 0.141, -0.030, 0.301),
+      pvalue = c(0.000, 0.127, 0.012, 0.000, 0.023, 0.012,
+                 0.015, 0.556, 0.709, 0.000, 0.038, 0.049)
+    )
+  } else if(group_label == "Age") {
+    data.frame(
+      Group = rep(c("Older", "Younger"), each = 6),
+      Path = rep(c("IR → Anthro", "IR → Like", "IR → Disgust",
+                   "Anthro → Neg", "Like → Neg", "Disgust → Neg"), 2),
+      Beta = c(0.605, -0.005, 0.008, 0.132, -0.023, 0.254,
+               0.108, -0.065, 0.014, 0.146, -0.041, 0.406),
+      pvalue = c(0.000, 0.948, 0.254, 0.000, 0.095, 0.167,
+                 0.001, 0.287, 0.092, 0.000, 0.009, 0.001)
+    )
+  }
+}
+
+# Create comparison plot for each grouping variable
+create_path_comparison_plot <- function(group_label) {
+  path_data <- extract_path_coefficients(group_label)
+  
+  # Add significance stars
+  path_data$Significance <- ifelse(path_data$pvalue < 0.001, "***",
+                                   ifelse(path_data$pvalue < 0.01, "**",
+                                          ifelse(path_data$pvalue < 0.05, "*", "")))
+  
+  # Create the plot
+  p <- ggplot(path_data, aes(x = Path, y = Beta, fill = Group)) +
+    geom_bar(stat = "identity", position = position_dodge(width = 0.7), width = 0.6) +
+    geom_text(aes(label = Significance, y = Beta + ifelse(Beta >= 0, 0.02, -0.02)), 
+              position = position_dodge(width = 0.7), size = 4) +
+    scale_fill_manual(values = c("Gender 0" = "#1f77b4", "Gender 1" = "#ff7f0e",
+                                 "High Relig" = "#2ca02c", "Low Relig" = "#d62728",
+                                 "Older" = "#9467bd", "Younger" = "#8c564b")) +
+    labs(title = paste("Path Coefficients by", group_label),
+         subtitle = "Standardized Beta Coefficients",
+         x = "Structural Path",
+         y = "Standardized Beta") +
+    theme_minimal() +
+    theme(
+      axis.text.x = element_text(angle = 45, hjust = 1),
+      legend.position = "bottom",
+      plot.title = element_text(hjust = 0.5, face = "bold", size = 14),
+      plot.subtitle = element_text(hjust = 0.5, size = 12)
+    ) +
+    geom_hline(yintercept = 0, linetype = "dashed", color = "gray40")
+  
+  return(p)
+}
+
+# Generate and save plots
+cat("Generating path coefficient comparison plots...\n")
+
+# Gender comparison
+p_gender <- create_path_comparison_plot("Gender")
+print(p_gender)
+ggsave("Gender_Path_Comparison.png", p_gender, width = 10, height = 6, dpi = 300)
+
+# Religiosity comparison
+p_relig <- create_path_comparison_plot("Religiosity")
+print(p_relig)
+ggsave("Religiosity_Path_Comparison.png", p_relig, width = 10, height = 6, dpi = 300)
+
+# Age comparison
+p_age <- create_path_comparison_plot("Age")
+print(p_age)
+ggsave("Age_Path_Comparison.png", p_age, width = 10, height = 6, dpi = 300)
+
+# -----------------------------------------------------------------------------
+# 5.2 MULTI-GROUP SEM DIAGRAM
+# -----------------------------------------------------------------------------
+cat("\n=== Creating Multi-Group SEM Diagram ===\n")
+
+# Create a simplified SEM diagram showing group differences
+create_sem_diagram <- function() {
+  # Create a data frame for the visualization
+  diagram_data <- data.frame(
+    Group = factor(rep(c("Gender 0", "Gender 1", "High Relig", "Low Relig"), each = 2)),
+    Path = rep(c("IR → Anthro", "Anthro → Neg"), 4),
+    Beta = c(0.588, 0.142, 0.124, 0.120, 0.677, 0.124, -0.430, 0.141),
+    PathType = rep(c("First Stage", "Second Stage"), 4)
+  )
+  
+  p <- ggplot(diagram_data, aes(x = PathType, y = Beta, color = Group, group = Group)) +
+    geom_line(size = 1.5, alpha = 0.7) +
+    geom_point(size = 4) +
+    geom_text(aes(label = round(Beta, 3)), vjust = -1, size = 3.5) +
+    scale_color_manual(values = c("Gender 0" = "#1f77b4", "Gender 1" = "#ff7f0e",
+                                  "High Relig" = "#2ca02c", "Low Relig" = "#d62728")) +
+    labs(title = "Multi-Group SEM: Key Path Differences",
+         subtitle = "Comparison of Anthropomorphism Pathway Across Groups",
+         x = "Path Stage",
+         y = "Standardized Beta Coefficient") +
+    theme_minimal() +
+    theme(
+      legend.position = "bottom",
+      plot.title = element_text(hjust = 0.5, face = "bold", size = 14),
+      plot.subtitle = element_text(hjust = 0.5, size = 12),
+      panel.grid.major = element_line(color = "gray90"),
+      panel.grid.minor = element_blank()
+    ) +
+    ylim(-0.5, 0.8)
+  
+  return(p)
+}
+
+p_diagram <- create_sem_diagram()
+print(p_diagram)
+ggsave("MultiGroup_SEM_Diagram.png", p_diagram, width = 9, height = 6, dpi = 300)
+
+# -----------------------------------------------------------------------------
+# 5.3 HEATMAP OF GROUP DIFFERENCES
+# -----------------------------------------------------------------------------
+cat("\n=== Creating Heatmap of Group Differences ===\n")
+
+create_heatmap <- function() {
+  # Create heatmap data
+  heatmap_data <- expand.grid(
+    Group = c("Gender 0", "Gender 1", "High Relig", "Low Relig", "Older", "Younger"),
+    Path = c("IR → Anthro", "IR → Like", "IR → Disgust", 
+             "Anthro → Neg", "Like → Neg", "Disgust → Neg")
+  )
+  
+  # Add beta values (simplified for demonstration)
+  set.seed(123)
+  heatmap_data$Beta <- c(
+    0.588, 0.041, 0.021, 0.142, -0.021, 0.284,  # Gender 0
+    0.124, -0.111, 0.000, 0.120, -0.036, 0.354, # Gender 1
+    0.677, -0.148, 0.033, 0.124, -0.034, 0.357, # High Relig
+    -0.430, 0.114, -0.007, 0.141, -0.030, 0.301, # Low Relig
+    0.605, -0.005, 0.008, 0.132, -0.023, 0.254, # Older
+    0.108, -0.065, 0.014, 0.146, -0.041, 0.406  # Younger
+  )
+  
+  # Create heatmap
+  p <- ggplot(heatmap_data, aes(x = Path, y = Group, fill = Beta)) +
+    geom_tile(color = "white", size = 0.5) +
+    geom_text(aes(label = round(Beta, 3)), color = "black", size = 3) +
+    scale_fill_gradient2(low = "blue", mid = "white", high = "red",
+                         midpoint = 0, limits = c(-0.5, 0.7),
+                         name = "Beta\nCoefficient") +
+    labs(title = "Heatmap of Standardized Path Coefficients",
+         subtitle = "Comparison Across Demographic Groups",
+         x = "Structural Path",
+         y = "Demographic Group") +
+    theme_minimal() +
+    theme(
+      axis.text.x = element_text(angle = 45, hjust = 1, size = 10),
+      axis.text.y = element_text(size = 10),
+      plot.title = element_text(hjust = 0.5, face = "bold", size = 14),
+      plot.subtitle = element_text(hjust = 0.5, size = 12),
+      legend.position = "right"
+    )
+  
+  return(p)
+}
+
+p_heatmap <- create_heatmap()
+print(p_heatmap)
+ggsave("Group_Differences_Heatmap.png", p_heatmap, width = 11, height = 7, dpi = 300)
+
+# -----------------------------------------------------------------------------
+# 5.4 SIDE-BY-SIDE GROUP COMPARISON
+# -----------------------------------------------------------------------------
+cat("\n=== Creating Side-by-Side Group Comparison ===\n")
+
+# Create a comprehensive comparison figure
+create_comprehensive_comparison <- function() {
+  
+  # Prepare data for all groups
+  all_groups_data <- data.frame(
+    Group = factor(rep(c("Gender 0", "Gender 1", "High Relig", "Low Relig", 
+                         "Older", "Younger"), each = 6),
+                   levels = c("Gender 0", "Gender 1", "High Relig", "Low Relig", 
+                              "Older", "Younger")),
+    Path = rep(c("IR → Anthro", "Anthro → Neg", "IR → Like", "Like → Neg",
+                 "IR → Disgust", "Disgust → Neg"), 6),
+    Beta = c(
+      0.588, 0.142, 0.041, -0.021, 0.021, 0.284,
+      0.124, 0.120, -0.111, -0.036, 0.000, 0.354,
+      0.677, 0.124, -0.148, -0.034, 0.033, 0.357,
+      -0.430, 0.141, 0.114, -0.030, -0.007, 0.301,
+      0.605, 0.132, -0.005, -0.023, 0.008, 0.254,
+      0.108, 0.146, -0.065, -0.041, 0.014, 0.406
+    )
+  )
+  
+  # Create facet plot
+  p <- ggplot(all_groups_data, aes(x = Path, y = Beta, fill = Beta > 0)) +
+    geom_bar(stat = "identity", width = 0.7) +
+    facet_wrap(~ Group, ncol = 2) +
+    scale_fill_manual(values = c("TRUE" = "#d62728", "FALSE" = "#1f77b4"),
+                      guide = "none") +
+    labs(title = "Comprehensive Comparison of Structural Paths Across Groups",
+         subtitle = "Standardized Beta Coefficients for All Demographic Groups",
+         x = "Structural Path",
+         y = "Standardized Beta") +
+    theme_minimal() +
+    theme(
+      axis.text.x = element_text(angle = 45, hjust = 1, size = 8),
+      strip.text = element_text(face = "bold", size = 10),
+      plot.title = element_text(hjust = 0.5, face = "bold", size = 14),
+      plot.subtitle = element_text(hjust = 0.5, size = 12),
+      panel.spacing = unit(1, "lines")
+    ) +
+    geom_hline(yintercept = 0, linetype = "dashed", color = "gray40")
+  
+  return(p)
+}
+
+p_comprehensive <- create_comprehensive_comparison()
+print(p_comprehensive)
+ggsave("Comprehensive_Group_Comparison.png", p_comprehensive, width = 14, height = 10, dpi = 300)
+
+# -----------------------------------------------------------------------------
+# 5.5 DUAL-PATH MODEL DIAGRAM WITH GROUP DIFFERENCES
+# -----------------------------------------------------------------------------
+cat("\n=== Creating Dual-Path Model Diagram with Group Differences ===\n")
+
+# Create a conceptual diagram
+create_conceptual_diagram <- function() {
+  # Create node positions
+  nodes <- data.frame(
+    name = c("Intrinsic\nReligiosity", "Anthropomorphism", "Likeability", "Disgust\nSensitivity", 
+             "Negative\nRobot\nPerceptions"),
+    x = c(1, 2, 2, 2, 3),
+    y = c(3, 4, 3, 2, 3)
+  )
+  
+  # Create edges with group-specific effects
+  edges <- data.frame(
+    from = c("Intrinsic\nReligiosity", "Intrinsic\nReligiosity", "Intrinsic\nReligiosity",
+             "Anthropomorphism", "Likeability", "Disgust\nSensitivity"),
+    to = c("Anthropomorphism", "Likeability", "Disgust\nSensitivity",
+           "Negative\nRobot\nPerceptions", "Negative\nRobot\nPerceptions", "Negative\nRobot\nPerceptions"),
+    gender0 = c("β=.59***", "β=.04", "β=.02*", "β=.14***", "β=-.02", "β=.28"),
+    gender1 = c("β=.12**", "β=-.11", "β=.00", "β=.12***", "β=-.04*", "β=.35*"),
+    high_relig = c("β=.68***", "β=-.15", "β=.03*", "β=.12***", "β=-.03*", "β=.36*"),
+    low_relig = c("β=-.43*", "β=.11", "β=-.01", "β=.14***", "β=-.03*", "β=.30*")
+  )
+  
+  # Create the plot
+  p <- ggplot() +
+    # Add nodes
+    geom_point(data = nodes, aes(x = x, y = y), size = 20, color = "lightblue", fill = "lightblue", shape = 21) +
+    geom_text(data = nodes, aes(x = x, y = y, label = name), size = 3.5, fontface = "bold") +
+    
+    # Add edges (simplified for visualization)
+    geom_segment(aes(x = 1.2, y = 3, xend = 1.8, yend = 4), arrow = arrow(length = unit(0.2, "cm")), 
+                 size = 1, color = "#d62728") +
+    geom_segment(aes(x = 1.2, y = 3, xend = 1.8, yend = 2), arrow = arrow(length = unit(0.2, "cm")), 
+                 size = 1, color = "#2ca02c") +
+    geom_segment(aes(x = 2.2, y = 4, xend = 2.8, yend = 3), arrow = arrow(length = unit(0.2, "cm")), 
+                 size = 1, color = "#ff7f0e") +
+    geom_segment(aes(x = 2.2, y = 2, xend = 2.8, yend = 3), arrow = arrow(length = unit(0.2, "cm")), 
+                 size = 1, color = "#9467bd") +
+    
+    # Add legend for group differences
+    annotate("text", x = 0.5, y = 4.5, label = "Group Differences:", hjust = 0, fontface = "bold", size = 4) +
+    annotate("text", x = 0.5, y = 4.2, label = "Red: Strong in Gender 0 & High Relig", hjust = 0, color = "#d62728", size = 3) +
+    annotate("text", x = 0.5, y = 4.0, label = "Green: Disgust pathway", hjust = 0, color = "#2ca02c", size = 3) +
+    annotate("text", x = 0.5, y = 3.8, label = "Orange: Anthro → Neg path", hjust = 0, color = "#ff7f0e", size = 3) +
+    annotate("text", x = 0.5, y = 3.6, label = "Purple: Age differences", hjust = 0, color = "#9467bd", size = 3) +
+    
+    # Set limits and theme
+    xlim(0.5, 3.5) +
+    ylim(1.5, 4.5) +
+    theme_void() +
+    labs(title = "Dual-Path Model with Group Differences",
+         subtitle = "Visualization of Key Group-Specific Effects") +
+    theme(
+      plot.title = element_text(hjust = 0.5, face = "bold", size = 16),
+      plot.subtitle = element_text(hjust = 0.5, size = 12)
+    )
+  
+  return(p)
+}
+
+p_conceptual <- create_conceptual_diagram()
+print(p_conceptual)
+ggsave("DualPath_Group_Differences.png", p_conceptual, width = 10, height = 8, dpi = 300)
+
+# -----------------------------------------------------------------------------
+# SUMMARY
+# -----------------------------------------------------------------------------
+cat("\n=== VISUALIZATION SUMMARY ===\n")
+cat("Created the following diagrams:\n")
+cat("1. Gender_Path_Comparison.png - Bar chart comparing path coefficients\n")
+cat("2. Religiosity_Path_Comparison.png - Religiosity group comparisons\n")
+cat("3. Age_Path_Comparison.png - Age group comparisons\n")
+cat("4. MultiGroup_SEM_Diagram.png - SEM pathway diagram\n")
+cat("5. Group_Differences_Heatmap.png - Heatmap of all group differences\n")
+cat("6. Comprehensive_Group_Comparison.png - Faceted comparison of all groups\n")
+cat("7. DualPath_Group_Differences.png - Conceptual model with group effects\n")
+cat("\nAll diagrams saved to current working directory.\n")
