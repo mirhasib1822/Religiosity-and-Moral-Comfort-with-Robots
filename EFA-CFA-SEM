@@ -1,0 +1,759 @@
+# =============================================================================
+# COMPREHENSIVE ANALYSIS: RELIGIOSITY, DISGUST & ANTHROPOMORPHISM DUAL-PATH MODEL
+# Complete code from EFA through Multi-Group SEM
+# =============================================================================
+
+# Set working directory where your CSV file is located
+setwd("C:/path/to/your/folder")  # <-- modify this path as needed
+
+# Load the dataset
+data_all <- read.csv("Study 6 Data.csv", stringsAsFactors = FALSE)
+
+# Quick check of the data
+cat("=== DATA OVERVIEW ===\n")
+cat("Dataset dimensions:", dim(data_all), "\n")
+cat("First few rows:\n")
+print(head(data_all, 3))
+cat("\nColumn names:\n")
+print(colnames(data_all))
+
+# Required variables based on your measures
+required_cols <- c(
+  # Core variables for the dual-path model
+  "IR", "Anthropomorphism", "AnimalReminderDisgust",
+  
+  # IDAQ items for anthropomorphism (15 items)
+  paste0("IDAQ", 1:15),
+  
+  # Disgust scale items (8 items)
+  "DS.RPartI6", "DS.RPartI7REV", "DS.RPartI8", "DS.RPartI9",
+  "DS.RPartI13", "DS.RPartII_19", "DS.RPartII_20", "DS.RPartII_21",
+  
+  # IR items for intrinsic religiosity
+  "IR1", "IR2", "IR3",
+  
+  # Demographic variables
+  "Age", "Gender", "EmploymentStatus", "RobotsWork"
+)
+
+# Check which required columns are available
+available_cols <- required_cols[required_cols %in% colnames(data_all)]
+missing_cols <- setdiff(required_cols, colnames(data_all))
+
+cat("\n=== VARIABLE AVAILABILITY CHECK ===\n")
+cat("Available columns:", length(available_cols), "/", length(required_cols), "\n")
+if(length(missing_cols) > 0) {
+  cat("Missing columns:", paste(missing_cols, collapse = ", "), "\n")
+} else {
+  cat("All required variables are available!\n")
+}
+
+# Install required packages if not already installed
+required_packages <- c("psych", "lavaan", "semTools", "mirt", "lordif", "dplyr", "GPArotation")
+missing_packages <- required_packages[!required_packages %in% installed.packages()[,"Package"]]
+
+if(length(missing_packages) > 0) {
+  cat("Installing missing packages:", paste(missing_packages, collapse = ", "), "\n")
+  install.packages(missing_packages)
+}
+
+# Load required libraries
+library(psych)       # descriptive stats & reliability
+library(lavaan)      # CFA & SEM
+library(semTools)    # measurement invariance
+library(dplyr)       # data manipulation
+library(mirt)        # DIF analysis
+library(lordif)      # alternative DIF analysis
+library(GPArotation) # rotation methods
+
+# =============================================================================
+# 1. EXPLORATORY FACTOR ANALYSIS (EFA) FOR ALL SCALES
+# =============================================================================
+
+cat("\n", rep("=", 70), sep="")
+cat("\nEXPLORATORY FACTOR ANALYSIS (EFA) FOR ALL MEASURES")
+cat("\n", rep("=", 70), "\n", sep="")
+
+# -----------------------------------------------------------------------------
+# 1.1 EFA FOR INTRINSIC RELIGIOSITY (IR) SCALE
+# -----------------------------------------------------------------------------
+cat("\n=== 1.1 EFA FOR INTRINSIC RELIGIOSITY (IR) SCALE ===\n")
+
+if(all(c("IR1", "IR2", "IR3") %in% colnames(data_all))) {
+  ir_items <- c("IR1", "IR2", "IR3")
+  ir_data <- data_all[, ir_items]
+  ir_data_complete <- na.omit(ir_data)
+  
+  cat("Sample size for IR EFA:", nrow(ir_data_complete), "\n")
+  
+  if(nrow(ir_data_complete) > 50) {
+    # Check correlation matrix suitability
+    cor_matrix_ir <- cor(ir_data_complete)
+    KMO_ir <- KMO(cor_matrix_ir)
+    cat("KMO Measure of Sampling Adequacy:", round(KMO_ir$MSA, 3), "\n")
+    
+    bartlett_ir <- cortest.bartlett(cor_matrix_ir, n = nrow(ir_data_complete))
+    cat("Bartlett's test of sphericity: p =", format.pval(bartlett_ir$p.value, digits = 3), "\n")
+    
+    # Since IR has only 3 items, we'll check if it forms one factor
+    eigen_ir <- eigen(cor_matrix_ir)$values
+    cat("Eigenvalues:", round(eigen_ir, 3), "\n")
+    cat("Number of eigenvalues > 1:", sum(eigen_ir > 1), "\n")
+    
+    # Reliability
+    cat("\nReliability Analysis for IR Scale:\n")
+    print(psych::alpha(ir_data_complete))
+    
+  } else {
+    cat("Insufficient sample size for IR EFA\n")
+  }
+} else {
+  cat("IR items not available for EFA\n")
+}
+
+# -----------------------------------------------------------------------------
+# 1.2 EFA FOR ANTHROPOMORPHISM (IDAQ) SCALE
+# -----------------------------------------------------------------------------
+cat("\n=== 1.2 EFA FOR ANTHROPOMORPHISM (IDAQ) SCALE ===\n")
+
+if(all(paste0("IDAQ", 1:15) %in% colnames(data_all))) {
+  idaq_items <- paste0("IDAQ", 1:15)
+  idaq_data <- data_all[, idaq_items]
+  
+  # Convert to numeric and handle missing values
+  idaq_data <- as.data.frame(lapply(idaq_data, function(x) as.numeric(x)))
+  idaq_data_complete <- na.omit(idaq_data)
+  
+  cat("Sample size for IDAQ EFA:", nrow(idaq_data_complete), "\n")
+  
+  if(nrow(idaq_data_complete) > 100) {
+    # Check correlation matrix suitability
+    cor_matrix_idaq <- cor(idaq_data_complete)
+    KMO_idaq <- KMO(cor_matrix_idaq)
+    cat("KMO Measure of Sampling Adequacy:", round(KMO_idaq$MSA, 3), "\n")
+    
+    bartlett_idaq <- cortest.bartlett(cor_matrix_idaq, n = nrow(idaq_data_complete))
+    cat("Bartlett's test of sphericity: p =", format.pval(bartlett_idaq$p.value, digits = 3), "\n")
+    
+    # Determine number of factors using parallel analysis
+    cat("Using parallel analysis for factor number determination\n")
+    fa_parallel_idaq <- fa.parallel(idaq_data_complete, fa = "fa", plot = TRUE, 
+                                    main = "Parallel Analysis Scree Plot - IDAQ")
+    n_factors_idaq <- fa_parallel_idaq$nfact
+    cat("Suggested number of factors from parallel analysis:", n_factors_idaq, "\n")
+    
+    # Also check eigenvalues > 1 (Kaiser criterion)
+    eigen_idaq <- eigen(cor_matrix_idaq)$values
+    cat("Eigenvalues:", round(eigen_idaq, 3), "\n")
+    cat("Number of eigenvalues > 1:", sum(eigen_idaq > 1), "\n")
+    
+    # Perform EFA with suggested number of factors
+    cat("Using", n_factors_idaq, "factors for IDAQ EFA\n")
+    
+    efa_idaq <- fa(idaq_data_complete, nfactors = n_factors_idaq, rotate = "oblimin", fm = "ml")
+    print(efa_idaq, digits = 3, sort = TRUE)
+    
+    # Factor loadings plot
+    fa.diagram(efa_idaq, main = paste("EFA Factor Structure for IDAQ -", n_factors_idaq, "Factors"))
+    
+    # Reliability for the full scale
+    cat("\nReliability Analysis for Full IDAQ Scale:\n")
+    print(psych::alpha(idaq_data_complete))
+    
+  } else {
+    cat("Insufficient sample size for IDAQ EFA\n")
+  }
+} else {
+  cat("IDAQ items not available for EFA\n")
+}
+
+# -----------------------------------------------------------------------------
+# 1.3 EFA FOR DISGUST SENSITIVITY SCALE
+# -----------------------------------------------------------------------------
+cat("\n=== 1.3 EFA FOR ANIMAL REMINDER DISGUST SCALE ===\n")
+
+disgust_items <- c("DS.RPartI6", "DS.RPartI7REV", "DS.RPartI8", "DS.RPartI9",
+                   "DS.RPartI13", "DS.RPartII_19", "DS.RPartII_20", "DS.RPartII_21")
+
+if(all(disgust_items %in% colnames(data_all))) {
+  disgust_data <- data_all[, disgust_items]
+  disgust_data_complete <- na.omit(disgust_data)
+  
+  cat("Sample size for Disgust EFA:", nrow(disgust_data_complete), "\n")
+  
+  if(nrow(disgust_data_complete) > 50) {
+    # Check correlation matrix suitability
+    cor_matrix_disgust <- cor(disgust_data_complete)
+    KMO_disgust <- KMO(cor_matrix_disgust)
+    cat("KMO Measure of Sampling Adequacy:", round(KMO_disgust$MSA, 3), "\n")
+    
+    bartlett_disgust <- cortest.bartlett(cor_matrix_disgust, n = nrow(disgust_data_complete))
+    cat("Bartlett's test of sphericity: p =", format.pval(bartlett_disgust$p.value, digits = 3), "\n")
+    
+    # Determine number of factors
+    cat("Using parallel analysis for factor number determination\n")
+    fa_parallel_disgust <- fa.parallel(disgust_data_complete, fa = "fa", plot = TRUE,
+                                       main = "Parallel Analysis Scree Plot - Disgust Scale")
+    n_factors_disgust <- fa_parallel_disgust$nfact
+    cat("Suggested number of factors from parallel analysis:", n_factors_disgust, "\n")
+    
+    # Also check eigenvalues > 1
+    eigen_disgust <- eigen(cor_matrix_disgust)$values
+    cat("Eigenvalues:", round(eigen_disgust, 3), "\n")
+    cat("Number of eigenvalues > 1:", sum(eigen_disgust > 1), "\n")
+    
+    # Perform EFA
+    if(n_factors_disgust > 0) {
+      cat("Using", n_factors_disgust, "factors for Disgust EFA\n")
+      efa_disgust <- fa(disgust_data_complete, nfactors = n_factors_disgust, rotate = "oblimin", fm = "ml")
+      print(efa_disgust, digits = 3, sort = TRUE)
+      
+      # Factor loadings plot
+      fa.diagram(efa_disgust, main = paste("EFA Factor Structure for Disgust -", n_factors_disgust, "Factors"))
+    }
+    
+    # Reliability
+    cat("\nReliability Analysis for Disgust Scale:\n")
+    print(psych::alpha(disgust_data_complete))
+    
+  } else {
+    cat("Insufficient sample size for Disgust EFA\n")
+  }
+} else {
+  cat("Disgust items not available for EFA\n")
+}
+
+# =============================================================================
+# 2. CONFIRMATORY FACTOR ANALYSIS (CFA) FOR ALL SCALES
+# =============================================================================
+
+cat("\n", rep("=", 70), sep="")
+cat("\nCONFIRMATORY FACTOR ANALYSIS (CFA) TO VALIDATE FACTOR STRUCTURES")
+cat("\n", rep("=", 70), "\n", sep="")
+
+# -----------------------------------------------------------------------------
+# 2.1 CFA FOR INTRINSIC RELIGIOSITY (IR) SCALE
+# -----------------------------------------------------------------------------
+cat("\n=== 2.1 CFA FOR INTRINSIC RELIGIOSITY (IR) SCALE ===\n")
+
+if(all(c("IR1", "IR2", "IR3") %in% colnames(data_all))) {
+  # Unidimensional model for IR (3 items)
+  cfa_ir_model <- '
+  # Single factor model
+  IR_Factor =~ IR1 + IR2 + IR3
+  '
+  
+  cat("Fitting unidimensional IR model...\n")
+  fit_cfa_ir <- cfa(cfa_ir_model, data = data_all, estimator = "MLR", missing = "FIML")
+  
+  # Fit indices
+  cat("\nIR Scale CFA Fit Indices:\n")
+  fit_ir <- fitMeasures(fit_cfa_ir, c("chisq", "df", "pvalue", "cfi", "tli", "rmsea", "srmr"))
+  print(round(fit_ir, 3))
+  
+  # Parameter estimates
+  cat("\nIR Scale Standardized Parameter Estimates:\n")
+  ir_params <- standardizedSolution(fit_cfa_ir)
+  print(ir_params[ir_params$op == "=~", c("lhs", "op", "rhs", "est.std", "se", "pvalue")])
+  
+} else {
+  cat("IR items not available for CFA\n")
+}
+
+# -----------------------------------------------------------------------------
+# 2.2 CFA FOR ANTHROPOMORPHISM (IDAQ) SCALE
+# -----------------------------------------------------------------------------
+cat("\n=== 2.2 CFA FOR ANTHROPOMORPHISM (IDAQ) SCALE ===\n")
+
+if(all(paste0("IDAQ", 1:15) %in% colnames(data_all))) {
+  
+  # Model 1: 3-Factor Model based on EFA results
+  cfa_idaq_3factor_model <- '
+  # Factor definitions based on EFA results
+  Anthro_Animacy1 =~ IDAQ7 + IDAQ9 + IDAQ4 + IDAQ5 + IDAQ1
+  Likeability =~ IDAQ15 + IDAQ10 + IDAQ6 + IDAQ12 + IDAQ2
+  Anthro_Animacy2 =~ IDAQ8 + IDAQ11 + IDAQ14 + IDAQ13 + IDAQ3
+  
+  # Correlations between factors
+  Anthro_Animacy1 ~~ Anthro_Animacy2
+  Anthro_Animacy1 ~~ Likeability
+  Anthro_Animacy2 ~~ Likeability
+  '
+  
+  # Model 2: 2-Factor Model (combining highly correlated factors)
+  cfa_idaq_2factor_model <- '
+  # Combined anthropomorphism/animacy factor
+  Anthro_Animacy =~ IDAQ7 + IDAQ9 + IDAQ4 + IDAQ5 + IDAQ1 + 
+                    IDAQ8 + IDAQ11 + IDAQ14 + IDAQ13 + IDAQ3
+  Likeability =~ IDAQ15 + IDAQ10 + IDAQ6 + IDAQ12 + IDAQ2
+  
+  # Correlation between factors
+  Anthro_Animacy ~~ Likeability
+  '
+  
+  # Model 3: Unidimensional model
+  cfa_idaq_1factor_model <- '
+  # Single factor model
+  IDAQ_General =~ IDAQ1 + IDAQ2 + IDAQ3 + IDAQ4 + IDAQ5 + 
+                  IDAQ6 + IDAQ7 + IDAQ8 + IDAQ9 + IDAQ10 + 
+                  IDAQ11 + IDAQ12 + IDAQ13 + IDAQ14 + IDAQ15
+  '
+  
+  # Fit all models
+  cat("Fitting 3-Factor IDAQ Model (EFA-based)...\n")
+  fit_idaq_3factor <- cfa(cfa_idaq_3factor_model, data = data_all, estimator = "MLR", missing = "FIML")
+  
+  cat("Fitting 2-Factor IDAQ Model...\n")
+  fit_idaq_2factor <- cfa(cfa_idaq_2factor_model, data = data_all, estimator = "MLR", missing = "FIML")
+  
+  cat("Fitting 1-Factor IDAQ Model...\n")
+  fit_idaq_1factor <- cfa(cfa_idaq_1factor_model, data = data_all, estimator = "MLR", missing = "FIML")
+  
+  # Compare model fit
+  cat("\n=== IDAQ MODEL COMPARISON ===\n")
+  idaq_comparison <- lavTestLRT(fit_idaq_1factor, fit_idaq_2factor, fit_idaq_3factor)
+  print(idaq_comparison)
+  
+  # Fit indices for each model
+  cat("\n3-Factor Model Fit Indices:\n")
+  fit_3factor <- fitMeasures(fit_idaq_3factor, c("chisq", "df", "pvalue", "cfi", "tli", "rmsea", "srmr", "aic", "bic"))
+  print(round(fit_3factor, 3))
+  
+  cat("\n2-Factor Model Fit Indices:\n")
+  fit_2factor <- fitMeasures(fit_idaq_2factor, c("chisq", "df", "pvalue", "cfi", "tli", "rmsea", "srmr", "aic", "bic"))
+  print(round(fit_2factor, 3))
+  
+  cat("\n1-Factor Model Fit Indices:\n")
+  fit_1factor <- fitMeasures(fit_idaq_1factor, c("chisq", "df", "pvalue", "cfi", "tli", "rmsea", "srmr", "aic", "bic"))
+  print(round(fit_1factor, 3))
+  
+  # Determine best model
+  cfis <- c(fit_1factor["cfi"], fit_2factor["cfi"], fit_3factor["cfi"])
+  best_model_idx <- which.max(cfis)
+  model_names <- c("1-Factor", "2-Factor", "3-Factor")
+  
+  cat(sprintf("\nBest-fitting IDAQ model: %s (CFI = %.3f)\n", 
+              model_names[best_model_idx], cfis[best_model_idx]))
+  
+  # Display parameter estimates for best model
+  if(best_model_idx == 1) {
+    best_idaq_fit <- fit_idaq_1factor
+    cat("\nStandardized Parameter Estimates for 1-Factor Model:\n")
+  } else if(best_model_idx == 2) {
+    best_idaq_fit <- fit_idaq_2factor
+    cat("\nStandardized Parameter Estimates for 2-Factor Model:\n")
+  } else {
+    best_idaq_fit <- fit_idaq_3factor
+    cat("\nStandardized Parameter Estimates for 3-Factor Model:\n")
+  }
+  
+  idaq_params <- standardizedSolution(best_idaq_fit)
+  print(idaq_params[idaq_params$op == "=~", c("lhs", "op", "rhs", "est.std", "se", "pvalue")])
+  
+  # Factor correlations for multidimensional models
+  if(best_model_idx > 1) {
+    cat("\nFactor Correlations:\n")
+    factor_cors <- idaq_params[idaq_params$op == "~~" & idaq_params$lhs != idaq_params$rhs, ]
+    print(factor_cors[, c("lhs", "op", "rhs", "est.std", "se", "pvalue")])
+  }
+  
+} else {
+  cat("IDAQ items not available for CFA\n")
+}
+
+# -----------------------------------------------------------------------------
+# 2.3 CFA FOR ANIMAL REMINDER DISGUST SCALE
+# -----------------------------------------------------------------------------
+cat("\n=== 2.3 CFA FOR ANIMAL REMINDER DISGUST SCALE ===\n")
+
+if(all(disgust_items %in% colnames(data_all))) {
+  
+  # Model 1: 3-Factor Model based on EFA
+  cfa_disgust_3factor_model <- '
+  # Factor definitions based on EFA
+  Disgust1 =~ DS.RPartI6 + DS.RPartI8 + DS.RPartI13
+  Disgust2 =~ DS.RPartII_19 + DS.RPartII_20
+  Disgust3 =~ DS.RPartI9 + DS.RPartII_21
+  
+  # DS.RPartI7REV removed due to poor loading
+  # Correlations between factors
+  Disgust1 ~~ Disgust2
+  Disgust1 ~~ Disgust3
+  Disgust2 ~~ Disgust3
+  '
+  
+  # Model 2: 1-Factor Model
+  cfa_disgust_1factor_model <- '
+  # Single factor model
+  Disgust_General =~ DS.RPartI6 + DS.RPartI7REV + DS.RPartI8 + DS.RPartI9 + 
+                     DS.RPartI13 + DS.RPartII_19 + DS.RPartII_20 + DS.RPartII_21
+  '
+  
+  # Model 3: 2-Factor Model (combining factors with high correlation)
+  cfa_disgust_2factor_model <- '
+  # Combined factors based on EFA correlations
+  Disgust_Core =~ DS.RPartI6 + DS.RPartI8 + DS.RPartI13 + DS.RPartII_19 + DS.RPartII_20
+  Disgust_Other =~ DS.RPartI9 + DS.RPartII_21
+  
+  # Correlation between factors
+  Disgust_Core ~~ Disgust_Other
+  '
+  
+  # Fit models
+  cat("Fitting 3-Factor Disgust Model...\n")
+  fit_disgust_3factor <- cfa(cfa_disgust_3factor_model, data = data_all, estimator = "MLR", missing = "FIML")
+  
+  cat("Fitting 2-Factor Disgust Model...\n")
+  fit_disgust_2factor <- cfa(cfa_disgust_2factor_model, data = data_all, estimator = "MLR", missing = "FIML")
+  
+  cat("Fitting 1-Factor Disgust Model...\n")
+  fit_disgust_1factor <- cfa(cfa_disgust_1factor_model, data = data_all, estimator = "MLR", missing = "FIML")
+  
+  # Compare model fit
+  cat("\n=== DISGUST MODEL COMPARISON ===\n")
+  disgust_comparison <- lavTestLRT(fit_disgust_1factor, fit_disgust_2factor, fit_disgust_3factor)
+  print(disgust_comparison)
+  
+  # Fit indices
+  cat("\n3-Factor Model Fit Indices:\n")
+  fit_d3 <- fitMeasures(fit_disgust_3factor, c("chisq", "df", "pvalue", "cfi", "tli", "rmsea", "srmr", "aic", "bic"))
+  print(round(fit_d3, 3))
+  
+  cat("\n2-Factor Model Fit Indices:\n")
+  fit_d2 <- fitMeasures(fit_disgust_2factor, c("chisq", "df", "pvalue", "cfi", "tli", "rmsea", "srmr", "aic", "bic"))
+  print(round(fit_d2, 3))
+  
+  cat("\n1-Factor Model Fit Indices:\n")
+  fit_d1 <- fitMeasures(fit_disgust_1factor, c("chisq", "df", "pvalue", "cfi", "tli", "rmsea", "srmr", "aic", "bic"))
+  print(round(fit_d1, 3))
+  
+  # Determine best model
+  cfis_d <- c(fit_d1["cfi"], fit_d2["cfi"], fit_d3["cfi"])
+  best_disgust_idx <- which.max(cfis_d)
+  
+  cat(sprintf("\nBest-fitting Disgust model: %d-Factor (CFI = %.3f)\n", 
+              best_disgust_idx, cfis_d[best_disgust_idx]))
+  
+  # Display parameter estimates for best model
+  if(best_disgust_idx == 1) {
+    best_disgust_fit <- fit_disgust_1factor
+    cat("\nStandardized Parameter Estimates for 1-Factor Model:\n")
+  } else if(best_disgust_idx == 2) {
+    best_disgust_fit <- fit_disgust_2factor
+    cat("\nStandardized Parameter Estimates for 2-Factor Model:\n")
+  } else {
+    best_disgust_fit <- fit_disgust_3factor
+    cat("\nStandardized Parameter Estimates for 3-Factor Model:\n")
+  }
+  
+  disgust_params <- standardizedSolution(best_disgust_fit)
+  print(disgust_params[disgust_params$op == "=~", c("lhs", "op", "rhs", "est.std", "se", "pvalue")])
+  
+} else {
+  cat("Disgust items not available for CFA\n")
+}
+
+# =============================================================================
+# 3. STRUCTURAL EQUATION MODELING (SEM) - DUAL PATH MODEL
+# =============================================================================
+
+cat("\n", rep("=", 70), sep="")
+cat("\nSTRUCTURAL EQUATION MODELING - TESTING DUAL-PATH MODEL")
+cat("\n", rep("=", 70), "\n", sep="")
+
+# Define the dual-path SEM model using validated factor structures
+sem_model <- '
+# ==================== MEASUREMENT MODELS ====================
+
+# Anthropomorphism - 3 Factor Model (validated in CFA)
+Anthro_Animacy1 =~ IDAQ7 + IDAQ9 + IDAQ4 + IDAQ5 + IDAQ1
+Likeability =~ IDAQ15 + IDAQ10 + IDAQ6 + IDAQ12 + IDAQ2
+Anthro_Animacy2 =~ IDAQ8 + IDAQ11 + IDAQ14 + IDAQ13 + IDAQ3
+
+# Disgust Sensitivity - 3 Factor Model (validated in CFA)
+Disgust1 =~ DS.RPartI6 + DS.RPartI8 + DS.RPartI13
+Disgust2 =~ DS.RPartII_19 + DS.RPartII_20
+Disgust3 =~ DS.RPartI9 + DS.RPartII_21
+
+# ==================== STRUCTURAL MODEL ====================
+
+# PATHWAY 1: Religiosity -> Disgust -> Negative Perceptions
+Disgust1 ~ a11 * IR
+Disgust2 ~ a12 * IR  
+Disgust3 ~ a13 * IR
+RobotNegativePerceptions ~ b11 * Disgust1 + b12 * Disgust2 + b13 * Disgust3
+
+# PATHWAY 2: Religiosity -> Anthropomorphism -> Negative Perceptions
+Anthro_Animacy1 ~ a21 * IR
+Anthro_Animacy2 ~ a22 * IR
+Likeability ~ a23 * IR
+RobotNegativePerceptions ~ b21 * Anthro_Animacy1 + b22 * Anthro_Animacy2 + b23 * Likeability
+
+# ==================== INDIRECT EFFECTS ====================
+
+# Disgust Pathway Indirect Effects
+indirect_disgust1 := a11 * b11
+indirect_disgust2 := a12 * b12  
+indirect_disgust3 := a13 * b13
+total_indirect_disgust := a11*b11 + a12*b12 + a13*b13
+
+# Anthropomorphism Pathway Indirect Effects
+indirect_anthro1 := a21 * b21
+indirect_anthro2 := a22 * b22
+indirect_likeability := a23 * b23
+total_indirect_anthro := a21*b21 + a22*b22 + a23*b23
+
+# Total Indirect Effect
+total_indirect := total_indirect_disgust + total_indirect_anthro
+
+# ==================== COVARIANCES ====================
+
+# Correlations among exogenous latent variables
+Anthro_Animacy1 ~~ Anthro_Animacy2
+Anthro_Animacy1 ~~ Likeability
+Anthro_Animacy2 ~~ Likeability
+Disgust1 ~~ Disgust2
+Disgust1 ~~ Disgust3
+Disgust2 ~~ Disgust3
+
+# Correlations between disgust and anthropomorphism factors
+Anthro_Animacy1 ~~ Disgust1 + Disgust2 + Disgust3
+Anthro_Animacy2 ~~ Disgust1 + Disgust2 + Disgust3
+Likeability ~~ Disgust1 + Disgust2 + Disgust3
+'
+
+cat("Fitting Dual-Path SEM Model...\n")
+fit_sem <- sem(sem_model, data = data_all, estimator = "MLR", missing = "FIML")
+
+# Model fit summary
+cat("\n=== SEM MODEL FIT INDICES ===\n")
+sem_fit_measures <- fitMeasures(fit_sem, 
+                               c("chisq", "df", "pvalue", "cfi", "tli", "rmsea", "srmr", "aic", "bic"))
+print(round(sem_fit_measures, 3))
+
+# Detailed parameter estimates
+cat("\n=== STRUCTURAL PATH COEFFICIENTS ===\n")
+sem_params <- parameterEstimates(fit_sem, standardized = TRUE)
+
+# Display structural paths (regression coefficients)
+structural_paths <- sem_params[sem_params$op == "~", ]
+structural_paths_clean <- structural_paths[, c("lhs", "op", "rhs", "est", "std.all", "pvalue")]
+structural_paths_clean <- structural_paths_clean[order(structural_paths_clean$lhs, structural_paths_clean$rhs), ]
+print(structural_paths_clean)
+
+# Display indirect effects
+cat("\n=== INDIRECT EFFECTS ===\n")
+indirect_effects <- sem_params[sem_params$op == ":=", ]
+print(indirect_effects[, c("lhs", "est", "std.all", "pvalue")])
+
+# R-squared values for endogenous variables
+cat("\n=== R-SQUARED VALUES FOR ENDOGENOUS VARIABLES ===\n")
+r_squared <- inspect(fit_sem, "r2")
+print(round(r_squared, 3))
+
+# =============================================================================
+# 4. MULTI-GROUP STRUCTURAL EQUATION MODELING
+# =============================================================================
+
+cat("\n", rep("=", 70), sep="")
+cat("\nMULTI-GROUP STRUCTURAL EQUATION MODELING")
+cat("\n", rep("=", 70), "\n", sep="")
+
+# Prepare grouping variables
+data_all_clean <- data_all
+
+# Create categorical versions for grouping
+data_all_clean$GenderGroup <- as.factor(data_all_clean$Gender)
+data_all_clean$ReligiosityGroup <- ifelse(data_all_clean$IR >= median(data_all_clean$IR, na.rm = TRUE), 
+                                         "High", "Low")
+
+# Check and create other demographic groups
+if("Age" %in% colnames(data_all)) {
+  data_all_clean$AgeGroup <- ifelse(data_all_clean$Age >= median(data_all_clean$Age, na.rm = TRUE), 
+                                   "Older", "Younger")
+  cat("Age groups created (median split)\n")
+}
+
+if("EmploymentStatus" %in% colnames(data_all)) {
+  data_all_clean$EmploymentGroup <- as.factor(data_all_clean$EmploymentStatus)
+  cat("Employment groups created\n")
+}
+
+if("RobotsWork" %in% colnames(data_all)) {
+  data_all_clean$RobotExperience <- as.factor(data_all_clean$RobotsWork)
+  cat("Robot experience groups created\n")
+}
+
+# Remove cases with missing grouping variables
+data_all_clean <- data_all_clean %>%
+  filter(!is.na(Gender), !is.na(IR))
+
+cat("Final sample size for multi-group analysis:", nrow(data_all_clean), "\n")
+
+# SIMPLIFIED MODEL FOR MULTI-GROUP ANALYSIS (better stability)
+sem_model_simple <- '
+# ==================== MEASUREMENT MODELS ====================
+# Simplified factor structures
+Anthropomorphism =~ IDAQ7 + IDAQ9 + IDAQ4 + IDAQ5 + IDAQ1
+Likeability =~ IDAQ15 + IDAQ10 + IDAQ6 + IDAQ12 + IDAQ2
+Disgust =~ DS.RPartI6 + DS.RPartI8 + DS.RPartII_19 + DS.RPartII_20
+
+# ==================== STRUCTURAL MODEL ====================
+# Religiosity -> Mediators
+Anthropomorphism ~ IR
+Likeability ~ IR
+Disgust ~ IR
+
+# Mediators -> Outcome
+RobotNegativePerceptions ~ Anthropomorphism + Likeability + Disgust
+
+# ==================== COVARIANCES ====================
+Anthropomorphism ~~ Likeability
+'
+
+# Multi-group SEM function
+run_multi_group_sem <- function(group_var, group_label) {
+  cat(paste("\n", rep("=", 60), sep=""))
+  cat(paste("\n--- Multi-Group SEM for:", group_label, "---\n"))
+  cat(paste(rep("=", 60), "\n", sep=""))
+  
+  # Check group sizes
+  group_table <- table(data_all_clean[[group_var]])
+  cat("Group sizes:\n")
+  print(group_table)
+  
+  # Keep only groups with sufficient sample size
+  sufficient_groups <- names(group_table[group_table > 150])  # Increased for stability
+  if(length(sufficient_groups) < 2) {
+    cat("Insufficient groups for multi-group analysis (need at least 2 groups with n > 150)\n")
+    return(NULL)
+  }
+  
+  data_subset <- data_all_clean[data_all_clean[[group_var]] %in% sufficient_groups, ]
+  data_subset[[group_var]] <- droplevels(as.factor(data_subset[[group_var]]))
+  
+  cat("Groups included in analysis:", paste(sufficient_groups, collapse = ", "), "\n")
+  cat("Total sample size for this analysis:", nrow(data_subset), "\n")
+  
+  # Test measurement invariance first
+  cat("\n--- MEASUREMENT INVARIANCE TESTING ---\n")
+  
+  tryCatch({
+    # Configural invariance (same structure across groups)
+    cat("Fitting configural model (same structure)...\n")
+    configural <- sem(sem_model_simple, data = data_subset, group = group_var, 
+                      estimator = "MLR", missing = "FIML")
+    
+    # Metric invariance (equal loadings across groups)
+    cat("Fitting metric model (equal loadings)...\n")
+    metric <- sem(sem_model_simple, data = data_subset, group = group_var,
+                  group.equal = "loadings", estimator = "MLR", missing = "FIML")
+    
+    # Compare measurement invariance models
+    cat("\n--- MEASUREMENT INVARIANCE COMPARISON ---\n")
+    measurement_comparison <- lavTestLRT(configural, metric)
+    print(measurement_comparison)
+    
+    # Use metric model if measurement invariance holds, otherwise use configural
+    if(measurement_comparison$`Pr(>Chisq)`[2] > 0.05) {
+      cat("Measurement invariance SUPPORTED - using metric model for structural tests\n")
+      base_model <- metric
+    } else {
+      cat("Measurement invariance VIOLATED - using configural model for structural tests\n")
+      base_model <- configural
+    }
+    
+    # Test structural invariance for key paths
+    cat("\n--- STRUCTURAL INVARIANCE TESTING ---\n")
+    
+    # Test invariance of religiosity effects
+    cat("Testing invariance of religiosity effects...\n")
+    structural_relig <- sem(sem_model_simple, data = data_subset, group = group_var,
+                            group.equal = c("loadings", "regressions"), 
+                            estimator = "MLR", missing = "FIML")
+    
+    relig_comparison <- lavTestLRT(base_model, structural_relig)
+    cat("Religiosity effects invariance test:\n")
+    print(relig_comparison)
+    
+    # Extract group-specific parameter estimates
+    cat("\n--- GROUP-SPECIFIC STRUCTURAL PATHS ---\n")
+    group_params <- parameterEstimates(base_model, standardized = TRUE)
+    
+    # Display key structural paths by group
+    key_paths_to_examine <- c(
+      "Anthropomorphism ~ IR", "Likeability ~ IR", "Disgust ~ IR",
+      "RobotNegativePerceptions ~ Anthropomorphism", 
+      "RobotNegativePerceptions ~ Likeability",
+      "RobotNegativePerceptions ~ Disgust"
+    )
+    
+    for(path in key_paths_to_examine) {
+      cat(paste("\nPath:", path, "\n"))
+      path_split <- strsplit(path, " ~ ")[[1]]
+      lhs_var <- path_split[1]
+      rhs_var <- path_split[2]
+      
+      path_data <- group_params[group_params$op == "~" & 
+                                  group_params$lhs == lhs_var &
+                                  group_params$rhs == rhs_var, ]
+      
+      if(nrow(path_data) > 0) {
+        print(path_data[, c("group", "lhs", "op", "rhs", "est", "std.all", "pvalue")])
+      } else {
+        cat("No data found for this path\n")
+      }
+    }
+    
+  }, error = function(e) {
+    cat("Error in multi-group analysis:", e$message, "\n")
+    return(NULL)
+  })
+}
+
+# =============================================================================
+# EXECUTE MULTI-GROUP ANALYSES
+# =============================================================================
+
+cat("\n", rep("=", 70), sep="")
+cat("\nEXECUTING MULTI-GROUP SEM ANALYSES")
+cat("\n", rep("=", 70), "\n", sep="")
+
+# Run multi-group analysis for Gender
+if("GenderGroup" %in% colnames(data_all_clean)) {
+  run_multi_group_sem("GenderGroup", "Gender")
+} else {
+  cat("GenderGroup variable not found - skipping gender analysis\n")
+}
+
+# Run multi-group analysis for Religiosity
+if("ReligiosityGroup" %in% colnames(data_all_clean)) {
+  run_multi_group_sem("ReligiosityGroup", "Religiosity Level")
+} else {
+  cat("ReligiosityGroup variable not found - skipping religiosity analysis\n")
+}
+
+# Run multi-group analysis for Age (if available)
+if("AgeGroup" %in% colnames(data_all_clean)) {
+  run_multi_group_sem("AgeGroup", "Age")
+} else {
+  cat("AgeGroup variable not found - skipping age analysis\n")
+}
+
+# Run multi-group analysis for Employment (if available)
+if("EmploymentGroup" %in% colnames(data_all_clean)) {
+  run_multi_group_sem("EmploymentGroup", "Employment Status")
+} else {
+  cat("EmploymentGroup variable not found - skipping employment analysis\n")
+}
+
+# Run multi-group analysis for Robot Experience (if available)
+if("RobotExperience" %in% colnames(data_all_clean)) {
+  run_multi_group_sem("RobotExperience", "Robot Work Experience")
+} else {
+  cat("RobotExperience variable not found - skipping robot experience analysis\n")
+}
+
+cat("\n", rep("=", 70), sep="")
+cat("\nMULTI-GROUP SEM ANALYSIS COMPLETED")
+cat("\n", rep("=", 70), "\n", sep="")
