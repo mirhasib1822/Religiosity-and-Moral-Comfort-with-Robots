@@ -1,10 +1,9 @@
 # =============================================================================
 # REVISED ANALYSIS: RELIGIOSITY & ANTHROPOMORPHISM MODEL
-# Changes: No Disgust, Continuous IR, Descriptive Factors, Full Invariance Testing
+# Changes: No Disgust, Continuous IR, Descriptive Factors, Full Invariance Testing, Fixed demographic categories, combined Employment Status, updated dummy codes
 # =============================================================================
 
 # Set working directory
-> setwd("~/Downloads/BER/BER All Rob Analysis")
 
 # Load the dataset
 data_all <- read.csv("Study 6 Data.csv", stringsAsFactors = FALSE)
@@ -25,26 +24,51 @@ library(semPlot)     # Path diagrams
 # 0. DATA PREPARATION & DUMMY CODING
 # =============================================================================
 
-cat("\n=== DATA PREPARATION ===\n")
+cat("\n=== DATA PREPARATION & DUMMY CODING ===\n")
 
-# 1. Dummy Coding for Employment Status
-# Assumption: Categories are "Unemployed", "Self-employed", "Employed for someone else"
-# We treat "Unemployed" as the Reference Group (Baseline).
-
-if("EmploymentStatus" %in% colnames(data_all)) {
-  # Create Dummy 1: Self-Employed vs. Others
-  data_all$Emp_Self <- ifelse(data_all$EmploymentStatus == "Self-employed", 1, 0)
+# 1. Gender (4 Categories: Female, Male, Other, UD)
+if("Gender" %in% colnames(data_all)) {
+  # Ensure it is a factor for Multi-Group SEM
+  data_all$Gender <- as.factor(data_all$Gender)
   
-  # Create Dummy 2: Employed for Others vs. Others
-  data_all$Emp_EmployedOthers <- ifelse(data_all$EmploymentStatus == "Employed for someone else", 1, 0)
+  # Dummy Coding (Reference Group: Female)
+  data_all$Gender_Male  <- ifelse(data_all$Gender == "Male", 1, 0)
+  data_all$Gender_Other <- ifelse(data_all$Gender == "Other", 1, 0)
+  data_all$Gender_UD    <- ifelse(data_all$Gender == "UD", 1, 0)
   
-  # Note: If both are 0, the person is in the "Unemployed" (Reference) group.
-  cat("Dummy variables created for EmploymentStatus (Ref: Unemployed).\n")
+  cat("Gender categorized and dummy coded (Ref: Female).\n")
 }
 
-# 2. Ensure Grouping Variables are Factors for Multi-Group Analysis
-if("Gender" %in% colnames(data_all)) data_all$Gender <- as.factor(data_all$Gender)
-if("RobotsWork" %in% colnames(data_all)) data_all$RobotsWork <- as.factor(data_all$RobotsWork)
+# 2. Employment Status (2 Categories: Employed vs. Unemployed)
+if("EmploymentStatus" %in% colnames(data_all)) {
+  # Combine 'Self-employed' and 'Employed for someone else' into 'Employed'
+  # Assuming raw data contains "unemployed", "self-employed", "employed for someone else"
+  data_all$EmploymentGroup <- ifelse(
+    grepl("self-employed|employed for someone else", data_all$EmploymentStatus, ignore.case = TRUE),
+    "Employed", 
+    "Unemployed"
+  )
+  
+  # Ensure it is a factor for Multi-Group SEM
+  data_all$EmploymentGroup <- as.factor(data_all$EmploymentGroup)
+  
+  # Dummy Coding (Reference Group: Unemployed)
+  data_all$Emp_Employed <- ifelse(data_all$EmploymentGroup == "Employed", 1, 0)
+  
+  cat("Employment Status recoded into Employed/Unemployed and dummy coded (Ref: Unemployed).\n")
+}
+
+# 3. Use of Robots at Work (3 Categories: Don't know, No, Yes)
+if("RobotsWork" %in% colnames(data_all)) {
+  # Ensure it is a factor for Multi-Group SEM
+  data_all$RobotsWork <- as.factor(data_all$RobotsWork)
+  
+  # Dummy Coding (Reference Group: No)
+  data_all$Robots_Yes      <- ifelse(data_all$RobotsWork == "Yes", 1, 0)
+  data_all$Robots_DontKnow <- ifelse(data_all$RobotsWork == "Don't know", 1, 0)
+  
+  cat("RobotsWork categorized and dummy coded (Ref: No).\n")
+}
 
 # =============================================================================
 # 1. EXPLORATORY FACTOR ANALYSIS (EFA)
@@ -81,14 +105,9 @@ if(all(idaq_items %in% colnames(data_all))) {
   # Determine number of factors (Parallel Analysis)
   fa.parallel(idaq_data, fa = "fa", fm = "ml", main = "Parallel Analysis - IDAQ")
   
-  # Run EFA with 3 factors (Common for IDAQ)
-  # Note: Adjust nfactors based on the scree plot if necessary
+  # Run EFA with 3 factors
   efa_idaq <- fa(idaq_data, nfactors = 3, rotate = "oblimin", fm = "ml")
-  
   print(efa_idaq, digits = 3, sort = TRUE, cutoff = 0.3)
-  
-  cat("\nNOTE: Check the pattern matrix above to verify which items load on which factor.\n")
-  cat("The SEM section below assumes a specific item split. Update it if your EFA differs.\n")
 }
 
 # =============================================================================
@@ -99,14 +118,8 @@ cat("\n", rep("=", 70), sep="")
 cat("\nSECTION 2: STRUCTURAL EQUATION MODELING (Continuous IR)")
 cat("\n", rep("=", 70), "\n", sep="")
 
-# DEFINE THE MODEL
-# Note: I have renamed factors to descriptive labels. 
-# PLEASE VERIFY that the item groupings match your specific scale interpretation.
-
 sem_model <- '
   # ================= MEASUREMENT MODEL =================
-  # Renaming latent factors to conceptual labels
-  
   # Factor 1: e.g., Technology / Concrete
   Anthro_Technology =~ IDAQ7 + IDAQ9 + IDAQ4 + IDAQ5 + IDAQ1
   
@@ -116,8 +129,7 @@ sem_model <- '
   # Factor 3: e.g., Animals / Spiritual
   Anthro_Animals    =~ IDAQ8 + IDAQ11 + IDAQ14 + IDAQ13 + IDAQ3
   
-  # IR is observed or latent? 
-  # If IR is a latent construct measured by items:
+  # Intrinsic Religiosity Measurement Model
   Intrinsic_Relig   =~ IR1 + IR2 + IR3
 
   # ================= STRUCTURAL PATHS =================
@@ -127,22 +139,15 @@ sem_model <- '
   Anthro_Animals    ~ a3 * Intrinsic_Relig
   
   # 2. Anthropomorphism Factors predict Negative Perceptions (H2)
-  # (Assuming RobotNegativePerceptions is an observed composite score)
   RobotNegativePerceptions ~ b1 * Anthro_Technology + 
                              b2 * Anthro_Nature + 
                              b3 * Anthro_Animals
   
   # ================= INDIRECT EFFECTS =================
-  # Testing mediation
   indirect_tech    := a1 * b1
   indirect_nature  := a2 * b2
   indirect_animals := a3 * b3
-  
   total_indirect   := indirect_tech + indirect_nature + indirect_animals
-  
-  # Direct effect (if testing partial mediation, add path: RobotNegativePerceptions ~ c * Intrinsic_Relig)
-  # Total effect
-  # total_effect := total_indirect + c
   
   # ================= COVARIANCES =================
   # Allow Anthro factors to covary
@@ -160,12 +165,10 @@ cat("\n--- Global Fit Indices ---\n")
 print(fitMeasures(fit_sem, c("chisq", "df", "pvalue", "cfi", "tli", "rmsea", "srmr")))
 
 cat("\n--- Standardized Parameter Estimates ---\n")
-# Extract standardized solution
 std_sol <- standardizedSolution(fit_sem)
 print(std_sol[std_sol$op == "~", c("lhs", "op", "rhs", "est.std", "pvalue", "ci.lower", "ci.upper")])
 
 cat("\n--- Indirect Effects Summary ---\n")
-# Filter for defined parameters (:=)
 print(std_sol[std_sol$op == ":=", c("lhs", "est.std", "pvalue", "ci.lower", "ci.upper")])
 
 # GENERATE PATH DIAGRAM
@@ -176,9 +179,9 @@ semPaths(fit_sem,
          edge.label.cex = 0.9, 
          curvePivot = TRUE,
          rotation = 2,
-         nCharNodes = 0, # Don't abbreviate node names too much
-         sizeMan = 5,    # Size of manifest variables
-         sizeLat = 8,    # Size of latent variables
+         nCharNodes = 0, 
+         sizeMan = 5,    
+         sizeLat = 8,    
          title = TRUE, 
          title.color = "black")
 
@@ -198,82 +201,81 @@ run_invariance_analysis <- function(grouping_var, label) {
   # Ensure sufficient sample size per group
   group_counts <- table(data_all[[grouping_var]])
   print(group_counts)
-  if(any(group_counts < 50)) {
-    cat("WARNING: One or more groups have N < 50. Results may be unstable.\n")
+  
+  # Drop groups that are too small to run an SEM properly (e.g., N < 10)
+  valid_groups <- names(group_counts[group_counts >= 10])
+  if(length(valid_groups) < length(group_counts)) {
+    cat("Note: Excluding very small groups from invariance testing to prevent model non-convergence.\n")
+  }
+  
+  # Subset data for invariance testing
+  mg_data <- data_all[data_all[[grouping_var]] %in% valid_groups, ]
+  
+  if(length(unique(mg_data[[grouping_var]])) < 2) {
+    cat("Not enough valid groups left to run Multi-Group Analysis.\n")
+    return(NULL)
   }
   
   # 1. Configural Invariance (Same structure)
-  fit_config <- sem(sem_model, data = data_all, group = grouping_var, 
+  fit_config <- sem(sem_model, data = mg_data, group = grouping_var, 
                     estimator = "MLR", missing = "FIML")
   
   # 2. Metric Invariance (Equal factor loadings)
-  fit_metric <- sem(sem_model, data = data_all, group = grouping_var, 
+  fit_metric <- sem(sem_model, data = mg_data, group = grouping_var, 
                     estimator = "MLR", missing = "FIML", group.equal = "loadings")
   
   # 3. Scalar Invariance (Equal loadings + intercepts)
-  fit_scalar <- sem(sem_model, data = data_all, group = grouping_var, 
+  fit_scalar <- sem(sem_model, data = mg_data, group = grouping_var, 
                     estimator = "MLR", missing = "FIML", group.equal = c("loadings", "intercepts"))
   
   # --- Comparison Table ---
   cat("\n--- Model Comparison (Delta Fit Indices) ---\n")
-  
-  # Helper to extract stats
   get_fit <- function(fit) {
-    fm <- fitMeasures(fit, c("chisq", "df", "cfi", "rmsea"))
-    return(fm)
+    if(!fit@Optim$converged) return(rep(NA, 4))
+    fitMeasures(fit, c("chisq", "df", "cfi", "rmsea"))
   }
   
   fits <- rbind(Configural = get_fit(fit_config),
                 Metric     = get_fit(fit_metric),
-                Scalar     = get_scalar <- get_fit(fit_scalar))
-  
+                Scalar     = get_fit(fit_scalar))
   fits <- as.data.frame(fits)
   
-  # Calculate Deltas (Metric - Configural, Scalar - Metric)
   fits$Delta_CFI <- c(NA, fits$cfi[2] - fits$cfi[1], fits$cfi[3] - fits$cfi[2])
   fits$Delta_RMSEA <- c(NA, fits$rmsea[2] - fits$rmsea[1], fits$rmsea[3] - fits$rmsea[2])
-  
   print(round(fits, 3))
-  
   cat("\nNote: |Delta CFI| <= 0.01 and |Delta RMSEA| <= 0.015 usually indicates invariance holds.\n")
   
-  # --- Group Specific Estimates (Based on best fitting model) ---
-  # Usually, we report estimates from the Configural model to show differences, 
-  # or Metric if loadings are invariant. Here we show Configural (freely estimated).
-  
+  # --- Group Specific Estimates ---
   cat("\n--- Standardized Effects per Group (Configural Model) ---\n")
-  params <- standardizedSolution(fit_config)
-  
-  # Filter for Regression paths only
-  reg_paths <- params[params$op == "~", c("group", "lhs", "rhs", "est.std", "pvalue", "ci.lower", "ci.upper")]
-  
-  # Map group numbers to labels
-  group_labels <- levels(as.factor(data_all[[grouping_var]]))
-  reg_paths$group_label <- group_labels[reg_paths$group]
-  
-  print(reg_paths)
+  if(fit_config@Optim$converged) {
+    params <- standardizedSolution(fit_config)
+    reg_paths <- params[params$op == "~", c("group", "lhs", "rhs", "est.std", "pvalue", "ci.lower", "ci.upper")]
+    
+    # Map group numbers to actual categorical labels
+    group_labels <- lavInspect(fit_config, "group.label")
+    reg_paths$group_label <- group_labels[reg_paths$group]
+    print(reg_paths)
+  } else {
+    cat("Model did not converge, unable to extract path estimates.\n")
+  }
 }
 
 # --- EXECUTE MULTI-GROUP ---
 
 # 1. By Gender
 if("Gender" %in% colnames(data_all)) {
+  # (Note: Groups like 'UD' or 'Other' might be excluded automatically by the function if N is < 10)
   run_invariance_analysis("Gender", "Gender")
 }
 
-# 2. By Robot Experience (assuming categorical)
+# 2. By Robot Experience 
 if("RobotsWork" %in% colnames(data_all)) {
   run_invariance_analysis("RobotsWork", "Robot Experience")
 }
 
-# 3. By Employment Status (Using the categorical variable, NOT the dummy codes)
-# Ensure we remove small groups if necessary (e.g., student/retired if N is low)
-if("EmploymentStatus" %in% colnames(data_all)) {
-  # Clean data to only include main groups if needed
-  # valid_emp <- names(which(table(data_all$EmploymentStatus) > 50))
-  # data_emp <- data_all[data_all$EmploymentStatus %in% valid_emp, ]
-  
-  run_invariance_analysis("EmploymentStatus", "Employment Status")
+# 3. By Employment Status (Using the recoded EmploymentGroup variable)
+if("EmploymentGroup" %in% colnames(data_all)) {
+  run_invariance_analysis("EmploymentGroup", "Employment Status (Recoded)")
 }
 
 cat("\nAnalysis Complete.\n")
