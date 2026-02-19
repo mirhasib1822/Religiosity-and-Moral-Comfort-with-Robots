@@ -1,0 +1,279 @@
+# =============================================================================
+# REVISED ANALYSIS: RELIGIOSITY & ANTHROPOMORPHISM MODEL
+# Changes: No Disgust, Continuous IR, Descriptive Factors, Full Invariance Testing
+# =============================================================================
+
+# Set working directory
+> setwd("~/Downloads/BER/BER All Rob Analysis")
+
+# Load the dataset
+data_all <- read.csv("Study 6 Data.csv", stringsAsFactors = FALSE)
+
+# Check required packages
+required_packages <- c("psych", "lavaan", "semTools", "dplyr", "GPArotation", "semPlot")
+new_packages <- required_packages[!(required_packages %in% installed.packages()[,"Package"])]
+if(length(new_packages)) install.packages(new_packages)
+
+# Load libraries
+library(psych)       # EFA & Descriptives
+library(lavaan)      # SEM
+library(semTools)    # Invariance & Validity
+library(dplyr)       # Data manipulation
+library(semPlot)     # Path diagrams
+
+# =============================================================================
+# 0. DATA PREPARATION & DUMMY CODING
+# =============================================================================
+
+cat("\n=== DATA PREPARATION ===\n")
+
+# 1. Dummy Coding for Employment Status
+# Assumption: Categories are "Unemployed", "Self-employed", "Employed for someone else"
+# We treat "Unemployed" as the Reference Group (Baseline).
+
+if("EmploymentStatus" %in% colnames(data_all)) {
+  # Create Dummy 1: Self-Employed vs. Others
+  data_all$Emp_Self <- ifelse(data_all$EmploymentStatus == "Self-employed", 1, 0)
+  
+  # Create Dummy 2: Employed for Others vs. Others
+  data_all$Emp_EmployedOthers <- ifelse(data_all$EmploymentStatus == "Employed for someone else", 1, 0)
+  
+  # Note: If both are 0, the person is in the "Unemployed" (Reference) group.
+  cat("Dummy variables created for EmploymentStatus (Ref: Unemployed).\n")
+}
+
+# 2. Ensure Grouping Variables are Factors for Multi-Group Analysis
+if("Gender" %in% colnames(data_all)) data_all$Gender <- as.factor(data_all$Gender)
+if("RobotsWork" %in% colnames(data_all)) data_all$RobotsWork <- as.factor(data_all$RobotsWork)
+
+# =============================================================================
+# 1. EXPLORATORY FACTOR ANALYSIS (EFA)
+# =============================================================================
+
+cat("\n", rep("=", 70), sep="")
+cat("\nSECTION 1: EXPLORATORY FACTOR ANALYSIS (EFA)")
+cat("\n", rep("=", 70), "\n", sep="")
+
+# -----------------------------------------------------------------------------
+# 1.1 EFA FOR INTRINSIC RELIGIOSITY (IR)
+# -----------------------------------------------------------------------------
+ir_items <- c("IR1", "IR2", "IR3")
+if(all(ir_items %in% colnames(data_all))) {
+  cat("\n--- EFA: Intrinsic Religiosity ---\n")
+  ir_data <- na.omit(data_all[, ir_items])
+  
+  # Reliability
+  print(psych::alpha(ir_data, title = "IR Reliability"))
+  
+  # Simple EFA (Expect 1 factor)
+  fa_ir <- fa(ir_data, nfactors = 1, fm = "ml")
+  print(fa_ir$loadings, cutoff = 0.3)
+}
+
+# -----------------------------------------------------------------------------
+# 1.2 EFA FOR ANTHROPOMORPHISM (IDAQ)
+# -----------------------------------------------------------------------------
+idaq_items <- paste0("IDAQ", 1:15)
+if(all(idaq_items %in% colnames(data_all))) {
+  cat("\n--- EFA: Anthropomorphism (IDAQ) ---\n")
+  idaq_data <- na.omit(data_all[, idaq_items])
+  
+  # Determine number of factors (Parallel Analysis)
+  fa.parallel(idaq_data, fa = "fa", fm = "ml", main = "Parallel Analysis - IDAQ")
+  
+  # Run EFA with 3 factors (Common for IDAQ)
+  # Note: Adjust nfactors based on the scree plot if necessary
+  efa_idaq <- fa(idaq_data, nfactors = 3, rotate = "oblimin", fm = "ml")
+  
+  print(efa_idaq, digits = 3, sort = TRUE, cutoff = 0.3)
+  
+  cat("\nNOTE: Check the pattern matrix above to verify which items load on which factor.\n")
+  cat("The SEM section below assumes a specific item split. Update it if your EFA differs.\n")
+}
+
+# =============================================================================
+# 2. STRUCTURAL EQUATION MODEL (SEM)
+# =============================================================================
+
+cat("\n", rep("=", 70), sep="")
+cat("\nSECTION 2: STRUCTURAL EQUATION MODELING (Continuous IR)")
+cat("\n", rep("=", 70), "\n", sep="")
+
+# DEFINE THE MODEL
+# Note: I have renamed factors to descriptive labels. 
+# PLEASE VERIFY that the item groupings match your specific scale interpretation.
+
+sem_model <- '
+  # ================= MEASUREMENT MODEL =================
+  # Renaming latent factors to conceptual labels
+  
+  # Factor 1: e.g., Technology / Concrete
+  Anthro_Technology =~ IDAQ7 + IDAQ9 + IDAQ4 + IDAQ5 + IDAQ1
+  
+  # Factor 2: e.g., Nature / Abstract
+  Anthro_Nature     =~ IDAQ15 + IDAQ10 + IDAQ6 + IDAQ12 + IDAQ2
+  
+  # Factor 3: e.g., Animals / Spiritual
+  Anthro_Animals    =~ IDAQ8 + IDAQ11 + IDAQ14 + IDAQ13 + IDAQ3
+  
+  # IR is observed or latent? 
+  # If IR is a latent construct measured by items:
+  Intrinsic_Relig   =~ IR1 + IR2 + IR3
+
+  # ================= STRUCTURAL PATHS =================
+  # 1. IR predicts Anthropomorphism Factors (H1)
+  Anthro_Technology ~ a1 * Intrinsic_Relig
+  Anthro_Nature     ~ a2 * Intrinsic_Relig
+  Anthro_Animals    ~ a3 * Intrinsic_Relig
+  
+  # 2. Anthropomorphism Factors predict Negative Perceptions (H2)
+  # (Assuming RobotNegativePerceptions is an observed composite score)
+  RobotNegativePerceptions ~ b1 * Anthro_Technology + 
+                             b2 * Anthro_Nature + 
+                             b3 * Anthro_Animals
+  
+  # ================= INDIRECT EFFECTS =================
+  # Testing mediation
+  indirect_tech    := a1 * b1
+  indirect_nature  := a2 * b2
+  indirect_animals := a3 * b3
+  
+  total_indirect   := indirect_tech + indirect_nature + indirect_animals
+  
+  # Direct effect (if testing partial mediation, add path: RobotNegativePerceptions ~ c * Intrinsic_Relig)
+  # Total effect
+  # total_effect := total_indirect + c
+  
+  # ================= COVARIANCES =================
+  # Allow Anthro factors to covary
+  Anthro_Technology ~~ Anthro_Nature
+  Anthro_Technology ~~ Anthro_Animals
+  Anthro_Nature     ~~ Anthro_Animals
+'
+
+# RUN SEM
+cat("Fitting SEM Model...\n")
+fit_sem <- sem(sem_model, data = data_all, estimator = "MLR", missing = "FIML")
+
+# REPORTING
+cat("\n--- Global Fit Indices ---\n")
+print(fitMeasures(fit_sem, c("chisq", "df", "pvalue", "cfi", "tli", "rmsea", "srmr")))
+
+cat("\n--- Standardized Parameter Estimates ---\n")
+# Extract standardized solution
+std_sol <- standardizedSolution(fit_sem)
+print(std_sol[std_sol$op == "~", c("lhs", "op", "rhs", "est.std", "pvalue", "ci.lower", "ci.upper")])
+
+cat("\n--- Indirect Effects Summary ---\n")
+# Filter for defined parameters (:=)
+print(std_sol[std_sol$op == ":=", c("lhs", "est.std", "pvalue", "ci.lower", "ci.upper")])
+
+# GENERATE PATH DIAGRAM
+cat("\n--- Generating Path Diagram ---\n")
+semPaths(fit_sem, 
+         whatLabels = "std", 
+         layout = "tree", 
+         edge.label.cex = 0.9, 
+         curvePivot = TRUE,
+         rotation = 2,
+         nCharNodes = 0, # Don't abbreviate node names too much
+         sizeMan = 5,    # Size of manifest variables
+         sizeLat = 8,    # Size of latent variables
+         title = TRUE, 
+         title.color = "black")
+
+# =============================================================================
+# 3. MULTI-GROUP SEM (INVARIANCE TESTING)
+# =============================================================================
+
+cat("\n", rep("=", 70), sep="")
+cat("\nSECTION 3: MULTI-GROUP SEM & INVARIANCE TESTING")
+cat("\n", rep("=", 70), "\n", sep="")
+
+# Function to run invariance testing
+run_invariance_analysis <- function(grouping_var, label) {
+  
+  cat(paste0("\n\n>>> RUNNING INVARIANCE ANALYSIS FOR: ", label, " <<<\n"))
+  
+  # Ensure sufficient sample size per group
+  group_counts <- table(data_all[[grouping_var]])
+  print(group_counts)
+  if(any(group_counts < 50)) {
+    cat("WARNING: One or more groups have N < 50. Results may be unstable.\n")
+  }
+  
+  # 1. Configural Invariance (Same structure)
+  fit_config <- sem(sem_model, data = data_all, group = grouping_var, 
+                    estimator = "MLR", missing = "FIML")
+  
+  # 2. Metric Invariance (Equal factor loadings)
+  fit_metric <- sem(sem_model, data = data_all, group = grouping_var, 
+                    estimator = "MLR", missing = "FIML", group.equal = "loadings")
+  
+  # 3. Scalar Invariance (Equal loadings + intercepts)
+  fit_scalar <- sem(sem_model, data = data_all, group = grouping_var, 
+                    estimator = "MLR", missing = "FIML", group.equal = c("loadings", "intercepts"))
+  
+  # --- Comparison Table ---
+  cat("\n--- Model Comparison (Delta Fit Indices) ---\n")
+  
+  # Helper to extract stats
+  get_fit <- function(fit) {
+    fm <- fitMeasures(fit, c("chisq", "df", "cfi", "rmsea"))
+    return(fm)
+  }
+  
+  fits <- rbind(Configural = get_fit(fit_config),
+                Metric     = get_fit(fit_metric),
+                Scalar     = get_scalar <- get_fit(fit_scalar))
+  
+  fits <- as.data.frame(fits)
+  
+  # Calculate Deltas (Metric - Configural, Scalar - Metric)
+  fits$Delta_CFI <- c(NA, fits$cfi[2] - fits$cfi[1], fits$cfi[3] - fits$cfi[2])
+  fits$Delta_RMSEA <- c(NA, fits$rmsea[2] - fits$rmsea[1], fits$rmsea[3] - fits$rmsea[2])
+  
+  print(round(fits, 3))
+  
+  cat("\nNote: |Delta CFI| <= 0.01 and |Delta RMSEA| <= 0.015 usually indicates invariance holds.\n")
+  
+  # --- Group Specific Estimates (Based on best fitting model) ---
+  # Usually, we report estimates from the Configural model to show differences, 
+  # or Metric if loadings are invariant. Here we show Configural (freely estimated).
+  
+  cat("\n--- Standardized Effects per Group (Configural Model) ---\n")
+  params <- standardizedSolution(fit_config)
+  
+  # Filter for Regression paths only
+  reg_paths <- params[params$op == "~", c("group", "lhs", "rhs", "est.std", "pvalue", "ci.lower", "ci.upper")]
+  
+  # Map group numbers to labels
+  group_labels <- levels(as.factor(data_all[[grouping_var]]))
+  reg_paths$group_label <- group_labels[reg_paths$group]
+  
+  print(reg_paths)
+}
+
+# --- EXECUTE MULTI-GROUP ---
+
+# 1. By Gender
+if("Gender" %in% colnames(data_all)) {
+  run_invariance_analysis("Gender", "Gender")
+}
+
+# 2. By Robot Experience (assuming categorical)
+if("RobotsWork" %in% colnames(data_all)) {
+  run_invariance_analysis("RobotsWork", "Robot Experience")
+}
+
+# 3. By Employment Status (Using the categorical variable, NOT the dummy codes)
+# Ensure we remove small groups if necessary (e.g., student/retired if N is low)
+if("EmploymentStatus" %in% colnames(data_all)) {
+  # Clean data to only include main groups if needed
+  # valid_emp <- names(which(table(data_all$EmploymentStatus) > 50))
+  # data_emp <- data_all[data_all$EmploymentStatus %in% valid_emp, ]
+  
+  run_invariance_analysis("EmploymentStatus", "Employment Status")
+}
+
+cat("\nAnalysis Complete.\n")
