@@ -1,0 +1,452 @@
+> # =============================================================================
+> # REVISED ANALYSIS: RELIGIOSITY & ANTHROPOMORPHISM MODEL
+> # Changes: No Disgust, Continuous IR, Descriptive Factors, Full Invariance Testing, Fixed demographic categories, combined Employment Status, updated dummy codes
+> # =============================================================================
+> 
+> # Set working directory
+> setwd("~/Downloads/BER/BER All Rob Analysis")
+> # Load the dataset
+> data_all <- read.csv("Study 6 Data.csv", stringsAsFactors = FALSE)
+> 
+> # Check required packages
+> required_packages <- c("psych", "lavaan", "semTools", "dplyr", "GPArotation", "semPlot")
+> new_packages <- required_packages[!(required_packages %in% installed.packages()[,"Package"])]
+> if(length(new_packages)) install.packages(new_packages)
+> 
+> # Load libraries
+> library(psych)       # EFA & Descriptives
+> library(lavaan)      # SEM
+> library(semTools)    # Invariance & Validity
+> library(dplyr)       # Data manipulation
+> library(semPlot)     # Path diagrams
+> 
+> # =============================================================================
+> # 0. DATA PREPARATION & DUMMY CODING
+> # =============================================================================
+> 
+> cat("\n=== DATA PREPARATION & DUMMY CODING ===\n")
+
+=== DATA PREPARATION & DUMMY CODING ===
+> 
+> if("Gender" %in% colnames(data_all)) {
++   data_all$Gender <- as.factor(data_all$Gender)
++   data_all$Gender_Male  <- ifelse(data_all$Gender == "Male", 1, 0)
++   data_all$Gender_Other <- ifelse(data_all$Gender == "Other", 1, 0)
++   data_all$Gender_UD    <- ifelse(data_all$Gender == "UD", 1, 0)
++   cat("Gender categorized and dummy coded (Ref: Female).\n")
++ }
+Gender categorized and dummy coded (Ref: Female).
+> 
+> if("EmploymentStatus" %in% colnames(data_all)) {
++   data_all$EmploymentGroup <- ifelse(
++     grepl("self-employed|employed for someone else", data_all$EmploymentStatus, ignore.case = TRUE),
++     "Employed", 
++     "Unemployed"
++   )
++   data_all$EmploymentGroup <- as.factor(data_all$EmploymentGroup)
++   data_all$Emp_Employed <- ifelse(data_all$EmploymentGroup == "Employed", 1, 0)
++   cat("Employment Status recoded into Employed/Unemployed and dummy coded (Ref: Unemployed).\n")
++ }
+Employment Status recoded into Employed/Unemployed and dummy coded (Ref: Unemployed).
+> 
+> if("RobotsWork" %in% colnames(data_all)) {
++   data_all$RobotsWork <- as.factor(data_all$RobotsWork)
++   data_all$Robots_Yes      <- ifelse(data_all$RobotsWork == "Yes", 1, 0)
++   data_all$Robots_DontKnow <- ifelse(data_all$RobotsWork == "Don't know", 1, 0)
++   cat("RobotsWork categorized and dummy coded (Ref: No).\n")
++ }
+RobotsWork categorized and dummy coded (Ref: No).
+> 
+> # =============================================================================
+> # 1. EXPLORATORY FACTOR ANALYSIS (EFA)
+> # =============================================================================
+> 
+> cat("\n", rep("=", 70), sep="")
+
+======================================================================> cat("\nSECTION 1: EXPLORATORY FACTOR ANALYSIS (EFA)")
+
+SECTION 1: EXPLORATORY FACTOR ANALYSIS (EFA)> cat("\n", rep("=", 70), "\n", sep="")
+
+======================================================================
+> 
+> ir_items <- c("IR1", "IR2", "IR3")
+> if(all(ir_items %in% colnames(data_all))) {
++   cat("\n--- EFA: Intrinsic Religiosity ---\n")
++   ir_data <- na.omit(data_all[, ir_items])
++   print(psych::alpha(ir_data, title = "IR Reliability"))
++   fa_ir <- fa(ir_data, nfactors = 1, fm = "ml")
++   print(fa_ir$loadings, cutoff = 0.3)
++ }
+
+--- EFA: Intrinsic Religiosity ---
+
+Reliability analysis  IR Reliability  
+Call: psych::alpha(x = ir_data, title = "IR Reliability")
+
+  raw_alpha std.alpha G6(smc) average_r S/N    ase mean  sd median_r
+      0.91      0.91    0.87      0.76 9.7 0.0035  3.2 1.3     0.76
+
+    95% confidence boundaries 
+         lower alpha upper
+Feldt      0.9  0.91  0.91
+Duhachek   0.9  0.91  0.91
+
+ Reliability if an item is dropped:
+    raw_alpha std.alpha G6(smc) average_r S/N alpha se var.r med.r
+IR1      0.90      0.90    0.82      0.82 9.3   0.0041    NA  0.82
+IR2      0.83      0.83    0.71      0.71 4.9   0.0072    NA  0.71
+IR3      0.86      0.86    0.76      0.76 6.3   0.0059    NA  0.76
+
+ Item statistics 
+       n raw.r std.r r.cor r.drop mean  sd
+IR1 2198  0.89  0.90  0.80   0.77  3.4 1.4
+IR2 2198  0.94  0.94  0.90   0.86  3.2 1.4
+IR3 2198  0.92  0.92  0.87   0.82  3.1 1.5
+
+Non missing response frequency for each item
+       1    2    3    4    5 miss
+IR1 0.17 0.09 0.17 0.29 0.29    0
+IR2 0.21 0.12 0.14 0.33 0.21    0
+IR3 0.24 0.13 0.15 0.29 0.19    0
+
+Loadings:
+    ML1  
+IR1 0.809
+IR2 0.937
+IR3 0.878
+
+                 ML1
+SS loadings    2.304
+Proportion Var 0.768
+> 
+> idaq_items <- paste0("IDAQ", 1:15)
+> if(all(idaq_items %in% colnames(data_all))) {
++   cat("\n--- EFA: Anthropomorphism (IDAQ) ---\n")
++   idaq_data <- na.omit(data_all[, idaq_items])
++   fa.parallel(idaq_data, fa = "fa", fm = "ml", main = "Parallel Analysis - IDAQ")
++   efa_idaq <- fa(idaq_data, nfactors = 3, rotate = "oblimin", fm = "ml")
++   print(efa_idaq, digits = 3, sort = TRUE, cutoff = 0.3)
++ }
+
+--- EFA: Anthropomorphism (IDAQ) ---
+Parallel analysis suggests that the number of factors =  3  and the number of components =  NA 
+Factor Analysis using method =  ml
+Call: fa(r = idaq_data, nfactors = 3, rotate = "oblimin", fm = "ml")
+Standardized loadings (pattern matrix) based upon correlation matrix
+       item    ML1    ML2    ML3    h2    u2  com
+IDAQ7     7  0.921 -0.015 -0.045 0.767 0.233 1.01
+IDAQ9     9  0.810  0.015  0.023 0.701 0.299 1.00
+IDAQ4     4  0.808 -0.003  0.037 0.703 0.297 1.00
+IDAQ5     5  0.797  0.009  0.007 0.651 0.349 1.00
+IDAQ1     1  0.657  0.064  0.113 0.620 0.380 1.08
+IDAQ15   15  0.017  0.851 -0.050 0.690 0.310 1.01
+IDAQ10   10 -0.078  0.849  0.008 0.676 0.324 1.02
+IDAQ6     6  0.006  0.790  0.047 0.672 0.328 1.01
+IDAQ12   12  0.041  0.779  0.029 0.664 0.336 1.01
+IDAQ2     2  0.057  0.748 -0.003 0.595 0.405 1.01
+IDAQ8     8 -0.042 -0.052  0.933 0.757 0.243 1.01
+IDAQ11   11 -0.038  0.035  0.845 0.693 0.307 1.01
+IDAQ14   14  0.117  0.007  0.732 0.703 0.297 1.05
+IDAQ13   13  0.055  0.211  0.635 0.668 0.332 1.23
+IDAQ3     3  0.265 -0.007  0.587 0.675 0.325 1.39
+
+                        ML1   ML2   ML3
+SS loadings           3.612 3.404 3.222
+Proportion Var        0.241 0.227 0.215
+Cumulative Var        0.241 0.468 0.682
+Proportion Explained  0.353 0.332 0.315
+Cumulative Proportion 0.353 0.685 1.000
+
+ With factor correlations of 
+      ML1   ML2   ML3
+ML1 1.000 0.429 0.860
+ML2 0.429 1.000 0.552
+ML3 0.860 0.552 1.000
+
+Mean item complexity =  1.1
+Test of the hypothesis that 3 factors are sufficient.
+
+df null model =  105  with the objective function =  11.518 0.3 with Chi Square =  25203.35
+df of  the model are 63  and the objective function was  0.237 
+ 0.3
+The root mean square of the residuals (RMSR) is  0.016 
+The df corrected root mean square of the residuals is  0.02 
+ 0.3
+The harmonic n.obs is  2195 with the empirical chi square  113.852  with prob <  9.2e-05 
+ 0.3The total n.obs was  2195  with Likelihood Chi Square =  518.697  with prob <  7.52e-73 
+ 0.3
+Tucker Lewis Index of factoring reliability =  0.9697
+RMSEA index =  0.0574  and the 90 % confidence intervals are  0.0529 0.062 0.3
+BIC =  33.979
+Fit based upon off diagonal values = 0.999
+Measures of factor score adequacy             
+                                                    ML1   ML2   ML3
+Correlation of (regression) scores with factors   0.965 0.954 0.964
+Multiple R square of scores with factors          0.932 0.911 0.929
+Minimum correlation of possible factor scores     0.864 0.822 0.858
+> 
+> # =============================================================================
+> # 2. STRUCTURAL EQUATION MODEL (SEM)
+> # =============================================================================
+> 
+> cat("\n", rep("=", 70), sep="")
+
+======================================================================> cat("\nSECTION 2: STRUCTURAL EQUATION MODELING (Continuous IR)")
+
+SECTION 2: STRUCTURAL EQUATION MODELING (Continuous IR)> cat("\n", rep("=", 70), "\n", sep="")
+
+======================================================================
+> 
+> # MAIN MODEL WITH LABELS FOR MEDIATION
+> sem_model <- '
++   # ================= MEASUREMENT MODEL =================
++   Anthro_Technology =~ IDAQ7 + IDAQ9 + IDAQ4 + IDAQ5 + IDAQ1
++   Anthro_Nature     =~ IDAQ15 + IDAQ10 + IDAQ6 + IDAQ12 + IDAQ2
++   Anthro_Animals    =~ IDAQ8 + IDAQ11 + IDAQ14 + IDAQ13 + IDAQ3
++   Intrinsic_Relig   =~ IR1 + IR2 + IR3
++ 
++   # ================= STRUCTURAL PATHS =================
++   Anthro_Technology ~ a1 * Intrinsic_Relig
++   Anthro_Nature     ~ a2 * Intrinsic_Relig
++   Anthro_Animals    ~ a3 * Intrinsic_Relig
++   
++   RobotNegativePerceptions ~ b1 * Anthro_Technology + 
++                              b2 * Anthro_Nature + 
++                              b3 * Anthro_Animals
++   
++   # ================= INDIRECT EFFECTS =================
++   indirect_tech    := a1 * b1
++   indirect_nature  := a2 * b2
++   indirect_animals := a3 * b3
++   total_indirect   := indirect_tech + indirect_nature + indirect_animals
++   
++   # ================= COVARIANCES =================
++   Anthro_Technology ~~ Anthro_Nature
++   Anthro_Technology ~~ Anthro_Animals
++   Anthro_Nature     ~~ Anthro_Animals
++ '
+> 
+> # RUN MAIN SEM
+> cat("Fitting SEM Model...\n")
+Fitting SEM Model...
+> fit_sem <- sem(sem_model, data = data_all, estimator = "MLR", missing = "FIML")
+> 
+> cat("\n--- Global Fit Indices ---\n")
+
+--- Global Fit Indices ---
+> print(fitMeasures(fit_sem, c("chisq", "df", "pvalue", "cfi", "tli", "rmsea", "rmsea.ci.lower", "rmsea.ci.upper", "srmr")))
+         chisq             df         pvalue            cfi            tli          rmsea rmsea.ci.lower 
+       971.508        144.000          0.000          0.973          0.967          0.051          0.048 
+rmsea.ci.upper           srmr 
+         0.054          0.030 
+> 
+> cat("\n--- Standardized Parameter Estimates ---\n")
+
+--- Standardized Parameter Estimates ---
+> std_sol <- standardizedSolution(fit_sem)
+> print(std_sol[std_sol$op == "~", c("lhs", "op", "rhs", "est.std", "pvalue", "ci.lower", "ci.upper")])
+                        lhs op               rhs est.std pvalue ci.lower ci.upper
+19        Anthro_Technology  ~   Intrinsic_Relig   0.183  0.000    0.144    0.223
+20            Anthro_Nature  ~   Intrinsic_Relig  -0.022  0.347   -0.069    0.024
+21           Anthro_Animals  ~   Intrinsic_Relig   0.166  0.000    0.124    0.208
+22 RobotNegativePerceptions  ~ Anthro_Technology   0.158  0.022    0.023    0.293
+23 RobotNegativePerceptions  ~     Anthro_Nature  -0.117  0.000   -0.171   -0.063
+24 RobotNegativePerceptions  ~    Anthro_Animals   0.173  0.018    0.030    0.317
+> 
+> cat("\n--- Indirect Effects Summary ---\n")
+
+--- Indirect Effects Summary ---
+> print(std_sol[std_sol$op == ":=", c("lhs", "est.std", "pvalue", "ci.lower", "ci.upper")])
+                lhs est.std pvalue ci.lower ci.upper
+74    indirect_tech   0.029  0.028    0.003    0.055
+75  indirect_nature   0.003  0.362   -0.003    0.008
+76 indirect_animals   0.029  0.023    0.004    0.054
+77   total_indirect   0.060  0.000    0.045    0.076
+> 
+> # GENERATE PATH DIAGRAM
+> cat("\n--- Generating Path Diagram ---\n")
+
+--- Generating Path Diagram ---
+> semPaths(fit_sem, 
++          whatLabels = "std", 
++          layout = "tree", 
++          edge.label.cex = 0.9, 
++          curvePivot = TRUE,
++          rotation = 2,
++          nCharNodes = 0, 
++          sizeMan = 5,    
++          sizeLat = 8,    
++          title = TRUE, 
++          title.color = "black")
+> # =============================================================================
+> # 3. MULTI-GROUP SEM (INVARIANCE TESTING)
+> # =============================================================================
+> 
+> cat("\n", rep("=", 70), sep="")
+
+======================================================================> cat("\nSECTION 3: MULTI-GROUP SEM & INVARIANCE TESTING")
+
+SECTION 3: MULTI-GROUP SEM & INVARIANCE TESTING> cat("\n", rep("=", 70), "\n", sep="")
+
+======================================================================
+> 
+> # MULTI-GROUP MODEL (NO LABELS, NO INDIRECT EFFECTS) to avoid equality constraints
+> sem_model_mg <- '
++   Anthro_Technology =~ IDAQ7 + IDAQ9 + IDAQ4 + IDAQ5 + IDAQ1
++   Anthro_Nature     =~ IDAQ15 + IDAQ10 + IDAQ6 + IDAQ12 + IDAQ2
++   Anthro_Animals    =~ IDAQ8 + IDAQ11 + IDAQ14 + IDAQ13 + IDAQ3
++   Intrinsic_Relig   =~ IR1 + IR2 + IR3
++ 
++   Anthro_Technology ~ Intrinsic_Relig
++   Anthro_Nature     ~ Intrinsic_Relig
++   Anthro_Animals    ~ Intrinsic_Relig
++   
++   RobotNegativePerceptions ~ Anthro_Technology + Anthro_Nature + Anthro_Animals
++   
++   Anthro_Technology ~~ Anthro_Nature
++   Anthro_Technology ~~ Anthro_Animals
++   Anthro_Nature     ~~ Anthro_Animals
++ '
+> 
+> run_invariance_analysis <- function(grouping_var, label) {
++   
++   cat(paste0("\n\n>>> RUNNING INVARIANCE ANALYSIS FOR: ", label, " <<<\n"))
++   
++   group_counts <- table(data_all[[grouping_var]])
++   print(group_counts)
++   
++   valid_groups <- names(group_counts[group_counts >= 50])
++   if(length(valid_groups) < length(group_counts)) {
++     cat("Note: Excluding groups with N < 50 from invariance testing to ensure model stability.\n")
++   }
++   
++   mg_data <- data_all[data_all[[grouping_var]] %in% valid_groups, ]
++   
++   if(length(unique(mg_data[[grouping_var]])) < 2) {
++     cat("Not enough valid groups left to run Multi-Group Analysis.\n")
++     return(NULL)
++   }
++   
++   fit_config <- sem(sem_model_mg, data = mg_data, group = grouping_var, 
++                     estimator = "MLR", missing = "FIML")
++   
++   fit_metric <- sem(sem_model_mg, data = mg_data, group = grouping_var, 
++                     estimator = "MLR", missing = "FIML", group.equal = "loadings")
++   
++   fit_scalar <- sem(sem_model_mg, data = mg_data, group = grouping_var, 
++                     estimator = "MLR", missing = "FIML", group.equal = c("loadings", "intercepts"))
++   
++   cat("\n--- Model Comparison (Delta Fit Indices) ---\n")
++   get_fit <- function(fit) {
++     if(!lavInspect(fit, "converged")) return(rep(NA, 4)) # <-- FIXED CONVERGENCE CHECK
++     fitMeasures(fit, c("chisq", "df", "cfi", "rmsea"))
++   }
++   
++   fits <- rbind(Configural = get_fit(fit_config),
++                 Metric     = get_fit(fit_metric),
++                 Scalar     = get_fit(fit_scalar))
++   fits <- as.data.frame(fits)
++   
++   fits$Delta_CFI <- c(NA, fits$cfi[2] - fits$cfi[1], fits$cfi[3] - fits$cfi[2])
++   fits$Delta_RMSEA <- c(NA, fits$rmsea[2] - fits$rmsea[1], fits$rmsea[3] - fits$rmsea[2])
++   print(round(fits, 3))
++   cat("\nNote: |Delta CFI| <= 0.01 and |Delta RMSEA| <= 0.015 usually indicates invariance holds.\n")
++   
++   cat("\n--- Standardized Effects per Group (Configural Model) ---\n")
++   if(lavInspect(fit_config, "converged")) { # <-- FIXED CONVERGENCE CHECK
++     params <- standardizedSolution(fit_config)
++     reg_paths <- params[params$op == "~", c("group", "lhs", "rhs", "est.std", "pvalue", "ci.lower", "ci.upper")]
++     
++     group_labels <- lavInspect(fit_config, "group.label")
++     reg_paths$group_label <- group_labels[reg_paths$group]
++     print(reg_paths)
++   } else {
++     cat("Model did not converge, unable to extract path estimates.\n")
++   }
++ }
+> 
+> # --- EXECUTE MULTI-GROUP ---
+> 
+> if("Gender" %in% colnames(data_all)) {
++   run_invariance_analysis("Gender", "Gender")
++ }
+
+
+>>> RUNNING INVARIANCE ANALYSIS FOR: Gender <<<
+
+   0    1    2 
+1164 1021   14 
+Note: Excluding groups with N < 50 from invariance testing to ensure model stability.
+
+--- Model Comparison (Delta Fit Indices) ---
+              chisq  df   cfi rmsea Delta_CFI Delta_RMSEA
+Configural 1166.514 288 0.971 0.053        NA          NA
+Metric     1217.070 302 0.969 0.053    -0.001           0
+Scalar     1281.649 317 0.968 0.053    -0.002           0
+
+Note: |Delta CFI| <= 0.01 and |Delta RMSEA| <= 0.015 usually indicates invariance holds.
+
+--- Standardized Effects per Group (Configural Model) ---
+   group                      lhs               rhs est.std pvalue ci.lower ci.upper group_label
+19     1        Anthro_Technology   Intrinsic_Relig   0.286  0.000    0.229    0.342           1
+20     1            Anthro_Nature   Intrinsic_Relig   0.023  0.525   -0.047    0.093           1
+21     1           Anthro_Animals   Intrinsic_Relig   0.267  0.000    0.208    0.326           1
+22     1 RobotNegativePerceptions Anthro_Technology   0.320  0.004    0.104    0.535           1
+23     1 RobotNegativePerceptions     Anthro_Nature  -0.058  0.148   -0.137    0.021           1
+24     1 RobotNegativePerceptions    Anthro_Animals   0.036  0.758   -0.194    0.266           1
+92     2        Anthro_Technology   Intrinsic_Relig   0.086  0.002    0.031    0.142           0
+93     2            Anthro_Nature   Intrinsic_Relig  -0.064  0.046   -0.126   -0.001           0
+94     2           Anthro_Animals   Intrinsic_Relig   0.073  0.015    0.014    0.131           0
+95     2 RobotNegativePerceptions Anthro_Technology   0.017  0.842   -0.150    0.184           0
+96     2 RobotNegativePerceptions     Anthro_Nature  -0.164  0.000   -0.238   -0.090           0
+97     2 RobotNegativePerceptions    Anthro_Animals   0.274  0.003    0.095    0.452           0
+> 
+> if("RobotsWork" %in% colnames(data_all)) {
++   run_invariance_analysis("RobotsWork", "Robot Experience")
++ }
+
+
+>>> RUNNING INVARIANCE ANALYSIS FOR: Robot Experience <<<
+
+   1    2    3 
+ 235 1064   16 
+Note: Excluding groups with N < 50 from invariance testing to ensure model stability.
+
+--- Model Comparison (Delta Fit Indices) ---
+              chisq  df   cfi rmsea Delta_CFI Delta_RMSEA
+Configural  939.679 288 0.964 0.059        NA          NA
+Metric      986.277 302 0.962 0.059    -0.002       0.000
+Scalar     1049.410 317 0.960 0.060    -0.003       0.001
+
+Note: |Delta CFI| <= 0.01 and |Delta RMSEA| <= 0.015 usually indicates invariance holds.
+
+--- Standardized Effects per Group (Configural Model) ---
+   group                      lhs               rhs est.std pvalue ci.lower ci.upper group_label
+19     1        Anthro_Technology   Intrinsic_Relig   0.192  0.000    0.134    0.250           2
+20     1            Anthro_Nature   Intrinsic_Relig  -0.004  0.911   -0.070    0.062           2
+21     1           Anthro_Animals   Intrinsic_Relig   0.162  0.000    0.101    0.222           2
+22     1 RobotNegativePerceptions Anthro_Technology   0.171  0.129   -0.050    0.392           2
+23     1 RobotNegativePerceptions     Anthro_Nature  -0.112  0.005   -0.190   -0.034           2
+24     1 RobotNegativePerceptions    Anthro_Animals   0.118  0.320   -0.114    0.349           2
+92     2        Anthro_Technology   Intrinsic_Relig   0.147  0.047    0.002    0.291           1
+93     2            Anthro_Nature   Intrinsic_Relig   0.086  0.251   -0.061    0.232           1
+94     2           Anthro_Animals   Intrinsic_Relig   0.090  0.235   -0.059    0.239           1
+95     2 RobotNegativePerceptions Anthro_Technology   0.517  0.020    0.081    0.953           1
+96     2 RobotNegativePerceptions     Anthro_Nature   0.004  0.972   -0.209    0.216           1
+97     2 RobotNegativePerceptions    Anthro_Animals  -0.097  0.706   -0.604    0.409           1
+> 
+> if("EmploymentGroup" %in% colnames(data_all)) {
++   run_invariance_analysis("EmploymentGroup", "Employment Status (Recoded)")
++ }
+
+
+>>> RUNNING INVARIANCE ANALYSIS FOR: Employment Status (Recoded) <<<
+
+Unemployed 
+      2203 
+Not enough valid groups left to run Multi-Group Analysis.
+NULL
+> 
+> cat("\nAnalysis Complete.\n")
+
+Analysis Complete.
