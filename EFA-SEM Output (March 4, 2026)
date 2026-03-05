@@ -1,12 +1,9 @@
 > # =============================================================================
-> # REVISED ANALYSIS: RELIGIOSITY & ANTHROPOMORPHISM MODEL
-> # Changes: Swapped Negative Perceptions for Positive & Competence Perceptions.
-> # Added comprehensive demographic profiling. Focused invariance on Gender.
+> # MASTER ANALYSIS SCRIPT: RELIGIOSITY & ANTHROPOMORPHISM MODEL
+> # Includes: Demographics, EFA, CFA, SEM with 3 DVs (Negative, Positive, Competence),
+> # and Multi-Group Invariance Testing for Gender.
 > # =============================================================================
-> 
-> # Set working directory where your CSV file is located
 > setwd("~/Downloads/Religiosity-and-Moral-Comfort-with-Robots/Analysis")
-> 
 > # Load the dataset
 > data_all <- read.csv("Study 6 Data.csv", stringsAsFactors = FALSE)
 > 
@@ -17,7 +14,7 @@
 > 
 > # Load libraries
 > library(psych)       # EFA & Descriptives
-> library(lavaan)      # SEM
+> library(lavaan)      # SEM & CFA
 > library(semTools)    # Invariance & Validity
 > library(dplyr)       # Data manipulation
 > library(semPlot)     # Path diagrams
@@ -262,9 +259,9 @@ Minimum correlation of possible factor scores     0.864 0.822 0.858
 > 
 > cat("\n", rep("=", 70), sep="")
 
-======================================================================> cat("\nSECTION 1.5: CONFIRMATORY FACTOR ANALYSIS (CFA) FOR ANTHROPOMORPHISM")
+======================================================================> cat("\nSECTION 2: CONFIRMATORY FACTOR ANALYSIS (CFA) FOR ANTHROPOMORPHISM")
 
-SECTION 1.5: CONFIRMATORY FACTOR ANALYSIS (CFA) FOR ANTHROPOMORPHISM> cat("\n", rep("=", 70), "\n", sep="")
+SECTION 2: CONFIRMATORY FACTOR ANALYSIS (CFA) FOR ANTHROPOMORPHISM> cat("\n", rep("=", 70), "\n", sep="")
 
 ======================================================================
 > 
@@ -316,19 +313,20 @@ rmsea.ci.upper           srmr
 14    Anthro_Animals =~ IDAQ13   0.809      0
 15    Anthro_Animals =~  IDAQ3   0.826      0
 > 
+> 
 > # =============================================================================
-> # 3. STRUCTURAL EQUATION MODEL (SEM)
+> # 3. STRUCTURAL EQUATION MODEL (SEM) - THREE DVs
 > # =============================================================================
 > 
 > cat("\n", rep("=", 70), sep="")
 
-======================================================================> cat("\nSECTION 2: STRUCTURAL EQUATION MODELING (Positive & Competence DVs)")
+======================================================================> cat("\nSECTION 3: STRUCTURAL EQUATION MODELING (Negative, Positive, & Competence)")
 
-SECTION 2: STRUCTURAL EQUATION MODELING (Positive & Competence DVs)> cat("\n", rep("=", 70), "\n", sep="")
+SECTION 3: STRUCTURAL EQUATION MODELING (Negative, Positive, & Competence)> cat("\n", rep("=", 70), "\n", sep="")
 
 ======================================================================
 > 
-> # MAIN MODEL WITH LABELS FOR MEDIATION
+> # MAIN MODEL WITH LABELS FOR MEDIATION ACROSS ALL THREE DVs
 > sem_model <- '
 +   # ================= MEASUREMENT MODEL =================
 +   Anthro_Technology =~ IDAQ7 + IDAQ9 + IDAQ4 + IDAQ5 + IDAQ1
@@ -341,6 +339,11 @@ SECTION 2: STRUCTURAL EQUATION MODELING (Positive & Competence DVs)> cat("\n", r
 +   Anthro_Nature     ~ a2 * Intrinsic_Relig
 +   Anthro_Animals    ~ a3 * Intrinsic_Relig
 +   
++   # ================= PATHS TO NEGATIVE PERCEPTIONS =================
++   RobotNegativePerceptions ~ b1neg * Anthro_Technology + 
++                              b2neg * Anthro_Nature + 
++                              b3neg * Anthro_Animals
++ 
 +   # ================= PATHS TO POSITIVE PERCEPTIONS =================
 +   RobotPositivePerceptions ~ b1pos * Anthro_Technology + 
 +                              b2pos * Anthro_Nature + 
@@ -350,7 +353,13 @@ SECTION 2: STRUCTURAL EQUATION MODELING (Positive & Competence DVs)> cat("\n", r
 +   RobotCompetencePerceptions ~ b1comp * Anthro_Technology + 
 +                                b2comp * Anthro_Nature + 
 +                                b3comp * Anthro_Animals
-+   
++                                
++   # ================= INDIRECT EFFECTS (NEGATIVE) =================
++   ind_tech_neg    := a1 * b1neg
++   ind_nature_neg  := a2 * b2neg
++   ind_animals_neg := a3 * b3neg
++   tot_ind_neg     := ind_tech_neg + ind_nature_neg + ind_animals_neg
++ 
 +   # ================= INDIRECT EFFECTS (POSITIVE) =================
 +   ind_tech_pos    := a1 * b1pos
 +   ind_nature_pos  := a2 * b2pos
@@ -364,17 +373,20 @@ SECTION 2: STRUCTURAL EQUATION MODELING (Positive & Competence DVs)> cat("\n", r
 +   tot_ind_comp     := ind_tech_comp + ind_nature_comp + ind_animals_comp
 +   
 +   # ================= COVARIANCES =================
++   # Covariances between mediators
 +   Anthro_Technology ~~ Anthro_Nature
 +   Anthro_Technology ~~ Anthro_Animals
 +   Anthro_Nature     ~~ Anthro_Animals
 +   
-+   # Allow the two dependent variables to covary
++   # Allow the three dependent variables to covary
++   RobotNegativePerceptions ~~ RobotPositivePerceptions
++   RobotNegativePerceptions ~~ RobotCompetencePerceptions
 +   RobotPositivePerceptions ~~ RobotCompetencePerceptions
 + '
 > 
 > # RUN MAIN SEM
-> cat("Fitting SEM Model...\n")
-Fitting SEM Model...
+> cat("Fitting Main SEM Model with 3 DVs...\n")
+Fitting Main SEM Model with 3 DVs...
 > fit_sem <- sem(sem_model, data = data_all, estimator = "MLR", missing = "FIML")
 > 
 > cat("\n--- Global Fit Indices ---\n")
@@ -382,9 +394,9 @@ Fitting SEM Model...
 --- Global Fit Indices ---
 > print(fitMeasures(fit_sem, c("chisq", "df", "pvalue", "cfi", "tli", "rmsea", "rmsea.ci.lower", "rmsea.ci.upper", "srmr")))
          chisq             df         pvalue            cfi            tli          rmsea rmsea.ci.lower 
-      1172.961        159.000          0.000          0.968          0.962          0.054          0.051 
+      1201.153        174.000          0.000          0.968          0.962          0.052          0.049 
 rmsea.ci.upper           srmr 
-         0.057          0.034 
+         0.055          0.033 
 > 
 > cat("\n--- Standardized Parameter Estimates ---\n")
 
@@ -392,29 +404,36 @@ rmsea.ci.upper           srmr
 > std_sol <- standardizedSolution(fit_sem)
 > print(std_sol[std_sol$op == "~", c("lhs", "op", "rhs", "est.std", "pvalue", "ci.lower", "ci.upper")])
                           lhs op               rhs est.std pvalue ci.lower ci.upper
-19          Anthro_Technology  ~   Intrinsic_Relig   0.190  0.000    0.150    0.230
-20              Anthro_Nature  ~   Intrinsic_Relig  -0.024  0.311   -0.071    0.023
-21             Anthro_Animals  ~   Intrinsic_Relig   0.165  0.000    0.123    0.207
-22   RobotPositivePerceptions  ~ Anthro_Technology   0.574  0.000    0.439    0.708
-23   RobotPositivePerceptions  ~     Anthro_Nature  -0.152  0.000   -0.207   -0.097
-24   RobotPositivePerceptions  ~    Anthro_Animals  -0.015  0.842   -0.163    0.133
-25 RobotCompetencePerceptions  ~ Anthro_Technology   0.261  0.000    0.124    0.398
-26 RobotCompetencePerceptions  ~     Anthro_Nature  -0.033  0.273   -0.093    0.026
-27 RobotCompetencePerceptions  ~    Anthro_Animals  -0.071  0.355   -0.223    0.080
+19          Anthro_Technology  ~   Intrinsic_Relig   0.193  0.000    0.153    0.232
+20              Anthro_Nature  ~   Intrinsic_Relig  -0.026  0.282   -0.072    0.021
+21             Anthro_Animals  ~   Intrinsic_Relig   0.166  0.000    0.124    0.208
+22   RobotNegativePerceptions  ~ Anthro_Technology   0.154  0.025    0.019    0.289
+23   RobotNegativePerceptions  ~     Anthro_Nature  -0.117  0.000   -0.171   -0.063
+24   RobotNegativePerceptions  ~    Anthro_Animals   0.177  0.016    0.033    0.320
+25   RobotPositivePerceptions  ~ Anthro_Technology   0.573  0.000    0.439    0.708
+26   RobotPositivePerceptions  ~     Anthro_Nature  -0.152  0.000   -0.207   -0.097
+27   RobotPositivePerceptions  ~    Anthro_Animals  -0.015  0.843   -0.162    0.133
+28 RobotCompetencePerceptions  ~ Anthro_Technology   0.261  0.000    0.124    0.398
+29 RobotCompetencePerceptions  ~     Anthro_Nature  -0.033  0.272   -0.093    0.026
+30 RobotCompetencePerceptions  ~    Anthro_Animals  -0.071  0.357   -0.223    0.080
 > 
 > cat("\n--- Indirect Effects Summary ---\n")
 
 --- Indirect Effects Summary ---
 > print(std_sol[std_sol$op == ":=", c("lhs", "est.std", "pvalue", "ci.lower", "ci.upper")])
                 lhs est.std pvalue ci.lower ci.upper
-80     ind_tech_pos   0.109  0.000    0.072    0.146
-81   ind_nature_pos   0.004  0.331   -0.004    0.011
-82  ind_animals_pos  -0.002  0.841   -0.027    0.022
-83      tot_ind_pos   0.110  0.000    0.086    0.134
-84    ind_tech_comp   0.050  0.001    0.020    0.079
-85  ind_nature_comp   0.001  0.482   -0.001    0.003
-86 ind_animals_comp  -0.012  0.354   -0.037    0.013
-87     tot_ind_comp   0.039  0.000    0.025    0.053
+87     ind_tech_neg   0.030  0.031    0.003    0.057
+88   ind_nature_neg   0.003  0.301   -0.003    0.009
+89  ind_animals_neg   0.029  0.020    0.005    0.054
+90      tot_ind_neg   0.062  0.000    0.046    0.078
+91     ind_tech_pos   0.110  0.000    0.073    0.148
+92   ind_nature_pos   0.004  0.304   -0.004    0.011
+93  ind_animals_pos  -0.002  0.843   -0.027    0.022
+94      tot_ind_pos   0.112  0.000    0.088    0.136
+95    ind_tech_comp   0.050  0.001    0.021    0.080
+96  ind_nature_comp   0.001  0.468   -0.001    0.003
+97 ind_animals_comp  -0.012  0.355   -0.037    0.013
+98     tot_ind_comp   0.039  0.000    0.025    0.053
 > 
 > # GENERATE PATH DIAGRAM
 > cat("\n--- Generating Path Diagram ---\n")
@@ -423,7 +442,7 @@ rmsea.ci.upper           srmr
 > semPaths(fit_sem, 
 +          whatLabels = "std", 
 +          layout = "tree", 
-+          edge.label.cex = 0.9, 
++          edge.label.cex = 0.8, 
 +          curvePivot = TRUE,
 +          rotation = 2,
 +          nCharNodes = 0, 
@@ -438,9 +457,9 @@ rmsea.ci.upper           srmr
 > 
 > cat("\n", rep("=", 70), sep="")
 
-======================================================================> cat("\nSECTION 3: MULTI-GROUP SEM & INVARIANCE TESTING")
+======================================================================> cat("\nSECTION 4: MULTI-GROUP SEM & INVARIANCE TESTING (GENDER)")
 
-SECTION 3: MULTI-GROUP SEM & INVARIANCE TESTING> cat("\n", rep("=", 70), "\n", sep="")
+SECTION 4: MULTI-GROUP SEM & INVARIANCE TESTING (GENDER)> cat("\n", rep("=", 70), "\n", sep="")
 
 ======================================================================
 > 
@@ -455,12 +474,16 @@ SECTION 3: MULTI-GROUP SEM & INVARIANCE TESTING> cat("\n", rep("=", 70), "\n", s
 +   Anthro_Nature     ~ Intrinsic_Relig
 +   Anthro_Animals    ~ Intrinsic_Relig
 +   
-+   RobotPositivePerceptions ~ Anthro_Technology + Anthro_Nature + Anthro_Animals
++   RobotNegativePerceptions   ~ Anthro_Technology + Anthro_Nature + Anthro_Animals
++   RobotPositivePerceptions   ~ Anthro_Technology + Anthro_Nature + Anthro_Animals
 +   RobotCompetencePerceptions ~ Anthro_Technology + Anthro_Nature + Anthro_Animals
 +   
 +   Anthro_Technology ~~ Anthro_Nature
 +   Anthro_Technology ~~ Anthro_Animals
 +   Anthro_Nature     ~~ Anthro_Animals
++   
++   RobotNegativePerceptions ~~ RobotPositivePerceptions
++   RobotNegativePerceptions ~~ RobotCompetencePerceptions
 +   RobotPositivePerceptions ~~ RobotCompetencePerceptions
 + '
 > 
@@ -542,32 +565,38 @@ Note: Excluding groups with N < 50 from invariance testing to ensure model stabi
 
 --- Model Comparison (Delta Fit Indices) ---
               chisq  df   cfi rmsea Delta_CFI Delta_RMSEA
-Configural 1389.380 318 0.966 0.056        NA          NA
-Metric     1439.459 332 0.965 0.055    -0.001           0
-Scalar     1529.749 348 0.962 0.056    -0.002           0
+Configural 1431.469 348 0.966 0.053        NA          NA
+Metric     1482.321 362 0.965 0.053    -0.001       0.000
+Scalar     1580.707 379 0.963 0.054    -0.003       0.001
 
 Note: |Delta CFI| <= 0.01 and |Delta RMSEA| <= 0.015 usually indicates invariance holds.
 
 --- Standardized Effects per Group (Configural Model) ---
     group                        lhs               rhs est.std pvalue ci.lower ci.upper group_label
-19      1          Anthro_Technology   Intrinsic_Relig   0.293  0.000    0.236    0.350        Male
-20      1              Anthro_Nature   Intrinsic_Relig   0.017  0.625   -0.053    0.088        Male
-21      1             Anthro_Animals   Intrinsic_Relig   0.270  0.000    0.210    0.330        Male
-22      1   RobotPositivePerceptions Anthro_Technology   0.423  0.002    0.152    0.693        Male
-23      1   RobotPositivePerceptions     Anthro_Nature  -0.233  0.000   -0.316   -0.151        Male
-24      1   RobotPositivePerceptions    Anthro_Animals   0.224  0.130   -0.066    0.515        Male
-25      1 RobotCompetencePerceptions Anthro_Technology   0.304  0.028    0.032    0.575        Male
-26      1 RobotCompetencePerceptions     Anthro_Nature  -0.119  0.010   -0.209   -0.029        Male
-27      1 RobotCompetencePerceptions    Anthro_Animals  -0.034  0.819   -0.328    0.260        Male
-98      2          Anthro_Technology   Intrinsic_Relig   0.093  0.001    0.037    0.148      Female
-99      2              Anthro_Nature   Intrinsic_Relig  -0.064  0.046   -0.126   -0.001      Female
-100     2             Anthro_Animals   Intrinsic_Relig   0.070  0.021    0.011    0.129      Female
-101     2   RobotPositivePerceptions Anthro_Technology   0.582  0.000    0.433    0.731      Female
-102     2   RobotPositivePerceptions     Anthro_Nature  -0.090  0.022   -0.166   -0.013      Female
-103     2   RobotPositivePerceptions    Anthro_Animals  -0.118  0.162   -0.283    0.048      Female
-104     2 RobotCompetencePerceptions Anthro_Technology   0.184  0.023    0.025    0.344      Female
-105     2 RobotCompetencePerceptions     Anthro_Nature   0.043  0.279   -0.035    0.122      Female
-106     2 RobotCompetencePerceptions    Anthro_Animals  -0.088  0.322   -0.264    0.087      Female
+19      1          Anthro_Technology   Intrinsic_Relig   0.295  0.000    0.238    0.352        Male
+20      1              Anthro_Nature   Intrinsic_Relig   0.017  0.641   -0.053    0.087        Male
+21      1             Anthro_Animals   Intrinsic_Relig   0.271  0.000    0.211    0.331        Male
+22      1   RobotNegativePerceptions Anthro_Technology   0.313  0.004    0.097    0.529        Male
+23      1   RobotNegativePerceptions     Anthro_Nature  -0.059  0.146   -0.138    0.020        Male
+24      1   RobotNegativePerceptions    Anthro_Animals   0.042  0.720   -0.188    0.273        Male
+25      1   RobotPositivePerceptions Anthro_Technology   0.423  0.002    0.152    0.694        Male
+26      1   RobotPositivePerceptions     Anthro_Nature  -0.233  0.000   -0.315   -0.151        Male
+27      1   RobotPositivePerceptions    Anthro_Animals   0.223  0.132   -0.067    0.514        Male
+28      1 RobotCompetencePerceptions Anthro_Technology   0.304  0.028    0.032    0.576        Male
+29      1 RobotCompetencePerceptions     Anthro_Nature  -0.118  0.010   -0.209   -0.028        Male
+30      1 RobotCompetencePerceptions    Anthro_Animals  -0.035  0.816   -0.330    0.260        Male
+105     2          Anthro_Technology   Intrinsic_Relig   0.095  0.001    0.039    0.151      Female
+106     2              Anthro_Nature   Intrinsic_Relig  -0.066  0.040   -0.128   -0.003      Female
+107     2             Anthro_Animals   Intrinsic_Relig   0.072  0.016    0.014    0.131      Female
+108     2   RobotNegativePerceptions Anthro_Technology   0.016  0.853   -0.151    0.183      Female
+109     2   RobotNegativePerceptions     Anthro_Nature  -0.164  0.000   -0.238   -0.090      Female
+110     2   RobotNegativePerceptions    Anthro_Animals   0.275  0.003    0.096    0.453      Female
+111     2   RobotPositivePerceptions Anthro_Technology   0.582  0.000    0.433    0.731      Female
+112     2   RobotPositivePerceptions     Anthro_Nature  -0.090  0.021   -0.167   -0.013      Female
+113     2   RobotPositivePerceptions    Anthro_Animals  -0.118  0.163   -0.283    0.048      Female
+114     2 RobotCompetencePerceptions Anthro_Technology   0.184  0.023    0.025    0.344      Female
+115     2 RobotCompetencePerceptions     Anthro_Nature   0.043  0.281   -0.035    0.121      Female
+116     2 RobotCompetencePerceptions    Anthro_Animals  -0.088  0.322   -0.264    0.087      Female
 > 
 > cat("\nAnalysis Complete.\n")
 
