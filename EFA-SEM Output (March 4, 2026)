@@ -1,0 +1,536 @@
+> # =============================================================================
+> # REVISED ANALYSIS: RELIGIOSITY & ANTHROPOMORPHISM MODEL
+> # Changes: Swapped Negative Perceptions for Positive & Competence Perceptions.
+> # Added comprehensive demographic profiling. Focused invariance on Gender.
+> # =============================================================================
+> 
+> # Set working directory where your CSV file is located
+> setwd("~/Downloads/Religiosity-and-Moral-Comfort-with-Robots/Analysis")
+> # Load the dataset
+> data_all <- read.csv("Study 6 Data.csv", stringsAsFactors = FALSE)
+> # Check required packages
+> required_packages <- c("psych", "lavaan", "semTools", "dplyr", "GPArotation", "semPlot")
+> new_packages <- required_packages[!(required_packages %in% installed.packages()[,"Package"])]
+> if(length(new_packages)) install.packages(new_packages)
+> 
+> # Load libraries
+> library(psych)       # EFA & Descriptives
+> library(lavaan)      # SEM
+This is lavaan 0.6-20
+lavaan is FREE software! Please report any bugs.
+
+Attaching package: ‘lavaan’
+
+The following object is masked from ‘package:psych’:
+
+    cor2cov
+> library(semTools)    # Invariance & Validity
+ 
+###############################################################################
+This is semTools 0.5-7
+All users of R (or SEM) are invited to submit functions or ideas for functions.
+###############################################################################
+
+Attaching package: ‘semTools’
+
+The following objects are masked from ‘package:psych’:
+
+    reliability, skew
+> library(dplyr)       # Data manipulation
+
+Attaching package: ‘dplyr’
+
+The following objects are masked from ‘package:stats’:
+
+    filter, lag
+
+The following objects are masked from ‘package:base’:
+
+    intersect, setdiff, setequal, union
+> library(semPlot)     # Path diagrams
+> # =============================================================================
+> # 0. DEMOGRAPHIC PROFILING & DATA PREPARATION
+> # =============================================================================
+> 
+> cat("\n=== PARTICIPANT DEMOGRAPHIC PROFILE ===\n")
+
+=== PARTICIPANT DEMOGRAPHIC PROFILE ===
+> 
+> # 1. Age
+> if("Age" %in% colnames(data_all)) {
++   cat("\n--- Age ---\n")
++   cat("Mean =", round(mean(data_all$Age, na.rm=TRUE), 2), 
++       "| SD =", round(sd(data_all$Age, na.rm=TRUE), 2), 
++       "| Min =", min(data_all$Age, na.rm=TRUE), 
++       "| Max =", max(data_all$Age, na.rm=TRUE), "\n")
++ }
+
+--- Age ---
+Mean = 47.95 | SD = 17.49 | Min = 18 | Max = 92 
+> 
+> # 2. Gender (0 = Female, 1 = Male, 2 = Other)
+> if("Gender" %in% colnames(data_all)) {
++   cat("\n--- Gender ---\n")
++   if(is.numeric(data_all$Gender)) {
++     data_all$Gender_Label <- factor(data_all$Gender, levels=c(0,1,2), labels=c("Female", "Male", "Other"))
++   } else {
++     data_all$Gender_Label <- as.factor(data_all$Gender)
++   }
++   gender_tab <- table(data_all$Gender_Label, useNA="ifany")
++   print(cbind(Count = gender_tab, Percentage = round(prop.table(gender_tab)*100, 2)))
++ }
+
+--- Gender ---
+       Count Percentage
+Female  1164      52.84
+Male    1021      46.35
+Other     14       0.64
+<NA>       4       0.18
+> 
+> # 3. Ethnicity (0=White, 1=Black, 2=Asian, 3=Hispanic, 4=Mixed, 5=Other)
+> if("Ethnicity" %in% colnames(data_all)) {
++   cat("\n--- Ethnicity (Racial Groups) ---\n")
++   if(is.numeric(data_all$Ethnicity)) {
++     data_all$Ethnicity_Label <- factor(data_all$Ethnicity, levels=c(0,1,2,3,4,5), 
++                                        labels=c("White", "Black", "Asian", "Hispanic", "Mixed", "Other"))
++   } else {
++     data_all$Ethnicity_Label <- as.factor(data_all$Ethnicity)
++   }
++   eth_tab <- table(data_all$Ethnicity_Label, useNA="ifany")
++   print(cbind(Count = eth_tab, Percentage = round(prop.table(eth_tab)*100, 2)))
++ }
+
+--- Ethnicity (Racial Groups) ---
+         Count Percentage
+White     1876      85.16
+Black      119       5.40
+Asian       64       2.91
+Hispanic    78       3.54
+Mixed       43       1.95
+Other       20       0.91
+<NA>         3       0.14
+> 
+> # 4. Employment Status (0=Unemployed, 1=Self-employed, 2=Employed)
+> if("EmploymentStatus" %in% colnames(data_all)) {
++   cat("\n--- Employment Status ---\n")
++   if(is.numeric(data_all$EmploymentStatus)) {
++     data_all$Employment_Label <- factor(data_all$EmploymentStatus, levels=c(0,1,2), 
++                                         labels=c("Unemployed", "Self-employed", "Employed"))
++   } else {
++     data_all$Employment_Label <- as.factor(data_all$EmploymentStatus)
++   }
++   emp_tab <- table(data_all$Employment_Label, useNA="ifany")
++   print(cbind(Count = emp_tab, Percentage = round(prop.table(emp_tab)*100, 2)))
++ }
+
+--- Employment Status ---
+              Count Percentage
+Unemployed      883      40.08
+Self-employed   206       9.35
+Employed       1110      50.39
+<NA>              4       0.18
+> 
+> # 5. Relationship Status (0=Single, 1=Relationship, 2=Married, 3=Divorced, 4=Widowed)
+> if("RelationshipStatus" %in% colnames(data_all)) {
++   cat("\n--- Relationship Status ---\n")
++   if(is.numeric(data_all$RelationshipStatus)) {
++     data_all$Relationship_Label <- factor(data_all$RelationshipStatus, levels=c(0,1,2,3,4), 
++                                           labels=c("Single", "In a relationship", "Married", "Divorced", "Widowed"))
++   } else {
++     data_all$Relationship_Label <- as.factor(data_all$RelationshipStatus)
++   }
++   rel_tab <- table(data_all$Relationship_Label, useNA="ifany")
++   print(cbind(Count = rel_tab, Percentage = round(prop.table(rel_tab)*100, 2)))
++ }
+
+--- Relationship Status ---
+                  Count Percentage
+Single              453      20.56
+In a relationship   143       6.49
+Married            1295      58.78
+Divorced            197       8.94
+Widowed             111       5.04
+<NA>                  4       0.18
+> # =============================================================================
+> # 1. EXPLORATORY FACTOR ANALYSIS (EFA)
+> # =============================================================================
+> 
+> cat("\n", rep("=", 70), sep="")
+
+======================================================================> cat("\nSECTION 1: EXPLORATORY FACTOR ANALYSIS (EFA)")
+
+SECTION 1: EXPLORATORY FACTOR ANALYSIS (EFA)> cat("\n", rep("=", 70), "\n", sep="")
+
+======================================================================
+> 
+> # EFA FOR INTRINSIC RELIGIOSITY (IR)
+> ir_items <- c("IR1", "IR2", "IR3")
+> if(all(ir_items %in% colnames(data_all))) {
++   cat("\n--- EFA: Intrinsic Religiosity ---\n")
++   ir_data <- na.omit(data_all[, ir_items])
++   print(psych::alpha(ir_data, title = "IR Reliability"))
++   fa_ir <- fa(ir_data, nfactors = 1, fm = "ml")
++   print(fa_ir$loadings, cutoff = 0.3)
++ }
+
+--- EFA: Intrinsic Religiosity ---
+
+Reliability analysis  IR Reliability  
+Call: psych::alpha(x = ir_data, title = "IR Reliability")
+
+  raw_alpha std.alpha G6(smc) average_r S/N    ase mean  sd median_r
+      0.91      0.91    0.87      0.76 9.7 0.0035  3.2 1.3     0.76
+
+    95% confidence boundaries 
+         lower alpha upper
+Feldt      0.9  0.91  0.91
+Duhachek   0.9  0.91  0.91
+
+ Reliability if an item is dropped:
+    raw_alpha std.alpha G6(smc) average_r S/N alpha se var.r med.r
+IR1      0.90      0.90    0.82      0.82 9.3   0.0041    NA  0.82
+IR2      0.83      0.83    0.71      0.71 4.9   0.0072    NA  0.71
+IR3      0.86      0.86    0.76      0.76 6.3   0.0059    NA  0.76
+
+ Item statistics 
+       n raw.r std.r r.cor r.drop mean  sd
+IR1 2198  0.89  0.90  0.80   0.77  3.4 1.4
+IR2 2198  0.94  0.94  0.90   0.86  3.2 1.4
+IR3 2198  0.92  0.92  0.87   0.82  3.1 1.5
+
+Non missing response frequency for each item
+       1    2    3    4    5 miss
+IR1 0.17 0.09 0.17 0.29 0.29    0
+IR2 0.21 0.12 0.14 0.33 0.21    0
+IR3 0.24 0.13 0.15 0.29 0.19    0
+
+Loadings:
+    ML1  
+IR1 0.809
+IR2 0.937
+IR3 0.878
+
+                 ML1
+SS loadings    2.304
+Proportion Var 0.768
+> 
+> # EFA FOR ANTHROPOMORPHISM (IDAQ)
+> idaq_items <- paste0("IDAQ", 1:15)
+> if(all(idaq_items %in% colnames(data_all))) {
++   cat("\n--- EFA: Anthropomorphism (IDAQ) ---\n")
++   idaq_data <- na.omit(data_all[, idaq_items])
++   fa.parallel(idaq_data, fa = "fa", fm = "ml", main = "Parallel Analysis - IDAQ")
++   efa_idaq <- fa(idaq_data, nfactors = 3, rotate = "oblimin", fm = "ml")
++   print(efa_idaq, digits = 3, sort = TRUE, cutoff = 0.3)
++ }
+
+--- EFA: Anthropomorphism (IDAQ) ---
+Parallel analysis suggests that the number of factors =  3  and the number of components =  NA 
+Loading required namespace: GPArotation
+Factor Analysis using method =  ml
+Call: fa(r = idaq_data, nfactors = 3, rotate = "oblimin", fm = "ml")
+Standardized loadings (pattern matrix) based upon correlation matrix
+       item    ML1    ML2    ML3    h2    u2  com
+IDAQ7     7  0.921 -0.015 -0.045 0.767 0.233 1.01
+IDAQ9     9  0.810  0.015  0.023 0.701 0.299 1.00
+IDAQ4     4  0.808 -0.003  0.037 0.703 0.297 1.00
+IDAQ5     5  0.797  0.009  0.007 0.651 0.349 1.00
+IDAQ1     1  0.657  0.064  0.113 0.620 0.380 1.08
+IDAQ15   15  0.017  0.851 -0.050 0.690 0.310 1.01
+IDAQ10   10 -0.078  0.849  0.008 0.676 0.324 1.02
+IDAQ6     6  0.006  0.790  0.047 0.672 0.328 1.01
+IDAQ12   12  0.041  0.779  0.029 0.664 0.336 1.01
+IDAQ2     2  0.057  0.748 -0.003 0.595 0.405 1.01
+IDAQ8     8 -0.042 -0.052  0.933 0.757 0.243 1.01
+IDAQ11   11 -0.038  0.035  0.845 0.693 0.307 1.01
+IDAQ14   14  0.117  0.007  0.732 0.703 0.297 1.05
+IDAQ13   13  0.055  0.211  0.635 0.668 0.332 1.23
+IDAQ3     3  0.265 -0.007  0.587 0.675 0.325 1.39
+
+                        ML1   ML2   ML3
+SS loadings           3.612 3.404 3.222
+Proportion Var        0.241 0.227 0.215
+Cumulative Var        0.241 0.468 0.682
+Proportion Explained  0.353 0.332 0.315
+Cumulative Proportion 0.353 0.685 1.000
+
+ With factor correlations of 
+      ML1   ML2   ML3
+ML1 1.000 0.429 0.860
+ML2 0.429 1.000 0.552
+ML3 0.860 0.552 1.000
+
+Mean item complexity =  1.1
+Test of the hypothesis that 3 factors are sufficient.
+
+df null model =  105  with the objective function =  11.518 0.3 with Chi Square =  25203.35
+df of  the model are 63  and the objective function was  0.237 
+ 0.3
+The root mean square of the residuals (RMSR) is  0.016 
+The df corrected root mean square of the residuals is  0.02 
+ 0.3
+The harmonic n.obs is  2195 with the empirical chi square  113.852  with prob <  9.2e-05 
+ 0.3The total n.obs was  2195  with Likelihood Chi Square =  518.697  with prob <  7.52e-73 
+ 0.3
+Tucker Lewis Index of factoring reliability =  0.9697
+RMSEA index =  0.0574  and the 90 % confidence intervals are  0.0529 0.062 0.3
+BIC =  33.979
+Fit based upon off diagonal values = 0.999
+Measures of factor score adequacy             
+                                                    ML1   ML2   ML3
+Correlation of (regression) scores with factors   0.965 0.954 0.964
+Multiple R square of scores with factors          0.932 0.911 0.929
+Minimum correlation of possible factor scores     0.864 0.822 0.858
+> # =============================================================================
+> # 2. STRUCTURAL EQUATION MODEL (SEM)
+> # =============================================================================
+> 
+> cat("\n", rep("=", 70), sep="")
+
+======================================================================> cat("\nSECTION 2: STRUCTURAL EQUATION MODELING (Positive & Competence DVs)")
+
+SECTION 2: STRUCTURAL EQUATION MODELING (Positive & Competence DVs)> cat("\n", rep("=", 70), "\n", sep="")
+
+======================================================================
+> 
+> # MAIN MODEL WITH LABELS FOR MEDIATION
+> sem_model <- '
++   # ================= MEASUREMENT MODEL =================
++   Anthro_Technology =~ IDAQ7 + IDAQ9 + IDAQ4 + IDAQ5 + IDAQ1
++   Anthro_Nature     =~ IDAQ15 + IDAQ10 + IDAQ6 + IDAQ12 + IDAQ2
++   Anthro_Animals    =~ IDAQ8 + IDAQ11 + IDAQ14 + IDAQ13 + IDAQ3
++   Intrinsic_Relig   =~ IR1 + IR2 + IR3
++ 
++   # ================= STRUCTURAL PATHS TO MEDIATORS =================
++   Anthro_Technology ~ a1 * Intrinsic_Relig
++   Anthro_Nature     ~ a2 * Intrinsic_Relig
++   Anthro_Animals    ~ a3 * Intrinsic_Relig
++   
++   # ================= PATHS TO POSITIVE PERCEPTIONS =================
++   RobotPositivePerceptions ~ b1pos * Anthro_Technology + 
++                              b2pos * Anthro_Nature + 
++                              b3pos * Anthro_Animals
++                              
++   # ================= PATHS TO COMPETENCE =================
++   RobotCompetencePerceptions ~ b1comp * Anthro_Technology + 
++                                b2comp * Anthro_Nature + 
++                                b3comp * Anthro_Animals
++   
++   # ================= INDIRECT EFFECTS (POSITIVE) =================
++   ind_tech_pos    := a1 * b1pos
++   ind_nature_pos  := a2 * b2pos
++   ind_animals_pos := a3 * b3pos
++   tot_ind_pos     := ind_tech_pos + ind_nature_pos + ind_animals_pos
++ 
++   # ================= INDIRECT EFFECTS (COMPETENCE) =================
++   ind_tech_comp    := a1 * b1comp
++   ind_nature_comp  := a2 * b2comp
++   ind_animals_comp := a3 * b3comp
++   tot_ind_comp     := ind_tech_comp + ind_nature_comp + ind_animals_comp
++   
++   # ================= COVARIANCES =================
++   Anthro_Technology ~~ Anthro_Nature
++   Anthro_Technology ~~ Anthro_Animals
++   Anthro_Nature     ~~ Anthro_Animals
++   
++   # Allow the two dependent variables to covary
++   RobotPositivePerceptions ~~ RobotCompetencePerceptions
++ '
+> 
+> # RUN MAIN SEM
+> cat("Fitting SEM Model...\n")
+Fitting SEM Model...
+> fit_sem <- sem(sem_model, data = data_all, estimator = "MLR", missing = "FIML")
+> 
+> cat("\n--- Global Fit Indices ---\n")
+
+--- Global Fit Indices ---
+> print(fitMeasures(fit_sem, c("chisq", "df", "pvalue", "cfi", "tli", "rmsea", "rmsea.ci.lower", "rmsea.ci.upper", "srmr")))
+         chisq             df         pvalue            cfi            tli          rmsea rmsea.ci.lower 
+      1172.961        159.000          0.000          0.968          0.962          0.054          0.051 
+rmsea.ci.upper           srmr 
+         0.057          0.034 
+> 
+> cat("\n--- Standardized Parameter Estimates ---\n")
+
+--- Standardized Parameter Estimates ---
+> std_sol <- standardizedSolution(fit_sem)
+> print(std_sol[std_sol$op == "~", c("lhs", "op", "rhs", "est.std", "pvalue", "ci.lower", "ci.upper")])
+                          lhs op               rhs est.std pvalue ci.lower ci.upper
+19          Anthro_Technology  ~   Intrinsic_Relig   0.190  0.000    0.150    0.230
+20              Anthro_Nature  ~   Intrinsic_Relig  -0.024  0.311   -0.071    0.023
+21             Anthro_Animals  ~   Intrinsic_Relig   0.165  0.000    0.123    0.207
+22   RobotPositivePerceptions  ~ Anthro_Technology   0.574  0.000    0.439    0.708
+23   RobotPositivePerceptions  ~     Anthro_Nature  -0.152  0.000   -0.207   -0.097
+24   RobotPositivePerceptions  ~    Anthro_Animals  -0.015  0.842   -0.163    0.133
+25 RobotCompetencePerceptions  ~ Anthro_Technology   0.261  0.000    0.124    0.398
+26 RobotCompetencePerceptions  ~     Anthro_Nature  -0.033  0.273   -0.093    0.026
+27 RobotCompetencePerceptions  ~    Anthro_Animals  -0.071  0.355   -0.223    0.080
+> 
+> cat("\n--- Indirect Effects Summary ---\n")
+
+--- Indirect Effects Summary ---
+> print(std_sol[std_sol$op == ":=", c("lhs", "est.std", "pvalue", "ci.lower", "ci.upper")])
+                lhs est.std pvalue ci.lower ci.upper
+80     ind_tech_pos   0.109  0.000    0.072    0.146
+81   ind_nature_pos   0.004  0.331   -0.004    0.011
+82  ind_animals_pos  -0.002  0.841   -0.027    0.022
+83      tot_ind_pos   0.110  0.000    0.086    0.134
+84    ind_tech_comp   0.050  0.001    0.020    0.079
+85  ind_nature_comp   0.001  0.482   -0.001    0.003
+86 ind_animals_comp  -0.012  0.354   -0.037    0.013
+87     tot_ind_comp   0.039  0.000    0.025    0.053
+> # GENERATE PATH DIAGRAM
+> cat("\n--- Generating Path Diagram ---\n")
+
+--- Generating Path Diagram ---
+> semPaths(fit_sem, 
++          whatLabels = "std", 
++          layout = "tree", 
++          edge.label.cex = 0.9, 
++          curvePivot = TRUE,
++          rotation = 2,
++          nCharNodes = 0, 
++          sizeMan = 5,    
++          sizeLat = 8,    
++          title = TRUE, 
++          title.color = "black")
+> # =============================================================================
+> # 3. MULTI-GROUP SEM (INVARIANCE TESTING - GENDER ONLY)
+> # =============================================================================
+> 
+> cat("\n", rep("=", 70), sep="")
+
+======================================================================> cat("\nSECTION 3: MULTI-GROUP SEM & INVARIANCE TESTING")
+
+SECTION 3: MULTI-GROUP SEM & INVARIANCE TESTING> cat("\n", rep("=", 70), "\n", sep="")
+
+======================================================================
+> 
+> # MULTI-GROUP MODEL (NO LABELS, NO INDIRECT EFFECTS to avoid equality constraints)
+> sem_model_mg <- '
++   Anthro_Technology =~ IDAQ7 + IDAQ9 + IDAQ4 + IDAQ5 + IDAQ1
++   Anthro_Nature     =~ IDAQ15 + IDAQ10 + IDAQ6 + IDAQ12 + IDAQ2
++   Anthro_Animals    =~ IDAQ8 + IDAQ11 + IDAQ14 + IDAQ13 + IDAQ3
++   Intrinsic_Relig   =~ IR1 + IR2 + IR3
++ 
++   Anthro_Technology ~ Intrinsic_Relig
++   Anthro_Nature     ~ Intrinsic_Relig
++   Anthro_Animals    ~ Intrinsic_Relig
++   
++   RobotPositivePerceptions ~ Anthro_Technology + Anthro_Nature + Anthro_Animals
++   RobotCompetencePerceptions ~ Anthro_Technology + Anthro_Nature + Anthro_Animals
++   
++   Anthro_Technology ~~ Anthro_Nature
++   Anthro_Technology ~~ Anthro_Animals
++   Anthro_Nature     ~~ Anthro_Animals
++   RobotPositivePerceptions ~~ RobotCompetencePerceptions
++ '
+> 
+> run_invariance_analysis <- function(grouping_var, label) {
++   
++   cat(paste0("\n\n>>> RUNNING INVARIANCE ANALYSIS FOR: ", label, " <<<\n"))
++   
++   # We use the raw variable or the created label variable depending on what exists
++   var_to_use <- ifelse(paste0(grouping_var, "_Label") %in% colnames(data_all), 
++                        paste0(grouping_var, "_Label"), 
++                        grouping_var)
++   
++   group_counts <- table(data_all[[var_to_use]])
++   print(group_counts)
++   
++   valid_groups <- names(group_counts[group_counts >= 50])
++   if(length(valid_groups) < length(group_counts)) {
++     cat("Note: Excluding groups with N < 50 from invariance testing to ensure model stability.\n")
++   }
++   
++   mg_data <- data_all[data_all[[var_to_use]] %in% valid_groups, ]
++   
++   if(length(unique(mg_data[[var_to_use]])) < 2) {
++     cat("Not enough valid groups left to run Multi-Group Analysis.\n")
++     return(NULL)
++   }
++   
++   fit_config <- sem(sem_model_mg, data = mg_data, group = var_to_use, 
++                     estimator = "MLR", missing = "FIML")
++   
++   fit_metric <- sem(sem_model_mg, data = mg_data, group = var_to_use, 
++                     estimator = "MLR", missing = "FIML", group.equal = "loadings")
++   
++   fit_scalar <- sem(sem_model_mg, data = mg_data, group = var_to_use, 
++                     estimator = "MLR", missing = "FIML", group.equal = c("loadings", "intercepts"))
++   
++   cat("\n--- Model Comparison (Delta Fit Indices) ---\n")
++   get_fit <- function(fit) {
++     if(!lavInspect(fit, "converged")) return(rep(NA, 4))
++     fitMeasures(fit, c("chisq", "df", "cfi", "rmsea"))
++   }
++   
++   fits <- rbind(Configural = get_fit(fit_config),
++                 Metric     = get_fit(fit_metric),
++                 Scalar     = get_fit(fit_scalar))
++   fits <- as.data.frame(fits)
++   
++   fits$Delta_CFI <- c(NA, fits$cfi[2] - fits$cfi[1], fits$cfi[3] - fits$cfi[2])
++   fits$Delta_RMSEA <- c(NA, fits$rmsea[2] - fits$rmsea[1], fits$rmsea[3] - fits$rmsea[2])
++   print(round(fits, 3))
++   cat("\nNote: |Delta CFI| <= 0.01 and |Delta RMSEA| <= 0.015 usually indicates invariance holds.\n")
++   
++   cat("\n--- Standardized Effects per Group (Configural Model) ---\n")
++   if(lavInspect(fit_config, "converged")) {
++     params <- standardizedSolution(fit_config)
++     reg_paths <- params[params$op == "~", c("group", "lhs", "rhs", "est.std", "pvalue", "ci.lower", "ci.upper")]
++     
++     group_labels <- lavInspect(fit_config, "group.label")
++     reg_paths$group_label <- group_labels[reg_paths$group]
++     print(reg_paths)
++   } else {
++     cat("Model did not converge, unable to extract path estimates.\n")
++   }
++ }
+> # --- EXECUTE MULTI-GROUP ---
+> 
+> # Focus only on Gender as per meeting notes
+> if("Gender" %in% colnames(data_all)) {
++   run_invariance_analysis("Gender", "Gender")
++ }
+
+
+>>> RUNNING INVARIANCE ANALYSIS FOR: Gender <<<
+
+Female   Male  Other 
+  1164   1021     14 
+Note: Excluding groups with N < 50 from invariance testing to ensure model stability.
+
+--- Model Comparison (Delta Fit Indices) ---
+              chisq  df   cfi rmsea Delta_CFI Delta_RMSEA
+Configural 1389.380 318 0.966 0.056        NA          NA
+Metric     1439.459 332 0.965 0.055    -0.001           0
+Scalar     1529.749 348 0.962 0.056    -0.002           0
+
+Note: |Delta CFI| <= 0.01 and |Delta RMSEA| <= 0.015 usually indicates invariance holds.
+
+--- Standardized Effects per Group (Configural Model) ---
+    group                        lhs               rhs est.std pvalue ci.lower ci.upper group_label
+19      1          Anthro_Technology   Intrinsic_Relig   0.293  0.000    0.236    0.350        Male
+20      1              Anthro_Nature   Intrinsic_Relig   0.017  0.625   -0.053    0.088        Male
+21      1             Anthro_Animals   Intrinsic_Relig   0.270  0.000    0.210    0.330        Male
+22      1   RobotPositivePerceptions Anthro_Technology   0.423  0.002    0.152    0.693        Male
+23      1   RobotPositivePerceptions     Anthro_Nature  -0.233  0.000   -0.316   -0.151        Male
+24      1   RobotPositivePerceptions    Anthro_Animals   0.224  0.130   -0.066    0.515        Male
+25      1 RobotCompetencePerceptions Anthro_Technology   0.304  0.028    0.032    0.575        Male
+26      1 RobotCompetencePerceptions     Anthro_Nature  -0.119  0.010   -0.209   -0.029        Male
+27      1 RobotCompetencePerceptions    Anthro_Animals  -0.034  0.819   -0.328    0.260        Male
+98      2          Anthro_Technology   Intrinsic_Relig   0.093  0.001    0.037    0.148      Female
+99      2              Anthro_Nature   Intrinsic_Relig  -0.064  0.046   -0.126   -0.001      Female
+100     2             Anthro_Animals   Intrinsic_Relig   0.070  0.021    0.011    0.129      Female
+101     2   RobotPositivePerceptions Anthro_Technology   0.582  0.000    0.433    0.731      Female
+102     2   RobotPositivePerceptions     Anthro_Nature  -0.090  0.022   -0.166   -0.013      Female
+103     2   RobotPositivePerceptions    Anthro_Animals  -0.118  0.162   -0.283    0.048      Female
+104     2 RobotCompetencePerceptions Anthro_Technology   0.184  0.023    0.025    0.344      Female
+105     2 RobotCompetencePerceptions     Anthro_Nature   0.043  0.279   -0.035    0.122      Female
+106     2 RobotCompetencePerceptions    Anthro_Animals  -0.088  0.322   -0.264    0.087      Female
+> 
+> cat("\nAnalysis Complete.\n")
+
+Analysis Complete.
