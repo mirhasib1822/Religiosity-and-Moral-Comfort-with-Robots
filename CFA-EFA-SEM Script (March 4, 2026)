@@ -5,7 +5,7 @@
 # =============================================================================
 
 # Set working directory
-> data_all <- read.csv("Study 6 Data.csv", stringsAsFactors = FALSE)
+
 
 # Load the dataset
 data_all <- read.csv("Study 6 Data.csv", stringsAsFactors = FALSE)
