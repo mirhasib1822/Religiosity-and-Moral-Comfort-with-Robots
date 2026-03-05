@@ -1,0 +1,296 @@
+# =============================================================================
+# REVISED ANALYSIS: RELIGIOSITY & ANTHROPOMORPHISM MODEL
+# Changes: Swapped Negative Perceptions for Positive & Competence Perceptions.
+# Added comprehensive demographic profiling. Focused invariance on Gender.
+# =============================================================================
+
+# Set working directory where your CSV file is located
+setwd("~/Downloads/Religiosity-and-Moral-Comfort-with-Robots/Analysis")
+
+# Load the dataset
+data_all <- read.csv("Study 6 Data.csv", stringsAsFactors = FALSE)
+
+# Check required packages
+required_packages <- c("psych", "lavaan", "semTools", "dplyr", "GPArotation", "semPlot")
+new_packages <- required_packages[!(required_packages %in% installed.packages()[,"Package"])]
+if(length(new_packages)) install.packages(new_packages)
+
+# Load libraries
+library(psych)       # EFA & Descriptives
+library(lavaan)      # SEM
+library(semTools)    # Invariance & Validity
+library(dplyr)       # Data manipulation
+library(semPlot)     # Path diagrams
+
+# =============================================================================
+# 0. DEMOGRAPHIC PROFILING & DATA PREPARATION
+# =============================================================================
+
+cat("\n=== PARTICIPANT DEMOGRAPHIC PROFILE ===\n")
+
+# 1. Age
+if("Age" %in% colnames(data_all)) {
+  cat("\n--- Age ---\n")
+  cat("Mean =", round(mean(data_all$Age, na.rm=TRUE), 2), 
+      "| SD =", round(sd(data_all$Age, na.rm=TRUE), 2), 
+      "| Min =", min(data_all$Age, na.rm=TRUE), 
+      "| Max =", max(data_all$Age, na.rm=TRUE), "\n")
+}
+
+# 2. Gender (0 = Female, 1 = Male, 2 = Other)
+if("Gender" %in% colnames(data_all)) {
+  cat("\n--- Gender ---\n")
+  if(is.numeric(data_all$Gender)) {
+    data_all$Gender_Label <- factor(data_all$Gender, levels=c(0,1,2), labels=c("Female", "Male", "Other"))
+  } else {
+    data_all$Gender_Label <- as.factor(data_all$Gender)
+  }
+  gender_tab <- table(data_all$Gender_Label, useNA="ifany")
+  print(cbind(Count = gender_tab, Percentage = round(prop.table(gender_tab)*100, 2)))
+}
+
+# 3. Ethnicity (0=White, 1=Black, 2=Asian, 3=Hispanic, 4=Mixed, 5=Other)
+if("Ethnicity" %in% colnames(data_all)) {
+  cat("\n--- Ethnicity (Racial Groups) ---\n")
+  if(is.numeric(data_all$Ethnicity)) {
+    data_all$Ethnicity_Label <- factor(data_all$Ethnicity, levels=c(0,1,2,3,4,5), 
+                                       labels=c("White", "Black", "Asian", "Hispanic", "Mixed", "Other"))
+  } else {
+    data_all$Ethnicity_Label <- as.factor(data_all$Ethnicity)
+  }
+  eth_tab <- table(data_all$Ethnicity_Label, useNA="ifany")
+  print(cbind(Count = eth_tab, Percentage = round(prop.table(eth_tab)*100, 2)))
+}
+
+# 4. Employment Status (0=Unemployed, 1=Self-employed, 2=Employed)
+if("EmploymentStatus" %in% colnames(data_all)) {
+  cat("\n--- Employment Status ---\n")
+  if(is.numeric(data_all$EmploymentStatus)) {
+    data_all$Employment_Label <- factor(data_all$EmploymentStatus, levels=c(0,1,2), 
+                                        labels=c("Unemployed", "Self-employed", "Employed"))
+  } else {
+    data_all$Employment_Label <- as.factor(data_all$EmploymentStatus)
+  }
+  emp_tab <- table(data_all$Employment_Label, useNA="ifany")
+  print(cbind(Count = emp_tab, Percentage = round(prop.table(emp_tab)*100, 2)))
+}
+
+# 5. Relationship Status (0=Single, 1=Relationship, 2=Married, 3=Divorced, 4=Widowed)
+if("RelationshipStatus" %in% colnames(data_all)) {
+  cat("\n--- Relationship Status ---\n")
+  if(is.numeric(data_all$RelationshipStatus)) {
+    data_all$Relationship_Label <- factor(data_all$RelationshipStatus, levels=c(0,1,2,3,4), 
+                                          labels=c("Single", "In a relationship", "Married", "Divorced", "Widowed"))
+  } else {
+    data_all$Relationship_Label <- as.factor(data_all$RelationshipStatus)
+  }
+  rel_tab <- table(data_all$Relationship_Label, useNA="ifany")
+  print(cbind(Count = rel_tab, Percentage = round(prop.table(rel_tab)*100, 2)))
+}
+
+# =============================================================================
+# 1. EXPLORATORY FACTOR ANALYSIS (EFA)
+# =============================================================================
+
+cat("\n", rep("=", 70), sep="")
+cat("\nSECTION 1: EXPLORATORY FACTOR ANALYSIS (EFA)")
+cat("\n", rep("=", 70), "\n", sep="")
+
+# EFA FOR INTRINSIC RELIGIOSITY (IR)
+ir_items <- c("IR1", "IR2", "IR3")
+if(all(ir_items %in% colnames(data_all))) {
+  cat("\n--- EFA: Intrinsic Religiosity ---\n")
+  ir_data <- na.omit(data_all[, ir_items])
+  print(psych::alpha(ir_data, title = "IR Reliability"))
+  fa_ir <- fa(ir_data, nfactors = 1, fm = "ml")
+  print(fa_ir$loadings, cutoff = 0.3)
+}
+
+# EFA FOR ANTHROPOMORPHISM (IDAQ)
+idaq_items <- paste0("IDAQ", 1:15)
+if(all(idaq_items %in% colnames(data_all))) {
+  cat("\n--- EFA: Anthropomorphism (IDAQ) ---\n")
+  idaq_data <- na.omit(data_all[, idaq_items])
+  fa.parallel(idaq_data, fa = "fa", fm = "ml", main = "Parallel Analysis - IDAQ")
+  efa_idaq <- fa(idaq_data, nfactors = 3, rotate = "oblimin", fm = "ml")
+  print(efa_idaq, digits = 3, sort = TRUE, cutoff = 0.3)
+}
+
+# =============================================================================
+# 2. STRUCTURAL EQUATION MODEL (SEM)
+# =============================================================================
+
+cat("\n", rep("=", 70), sep="")
+cat("\nSECTION 2: STRUCTURAL EQUATION MODELING (Positive & Competence DVs)")
+cat("\n", rep("=", 70), "\n", sep="")
+
+# MAIN MODEL WITH LABELS FOR MEDIATION
+sem_model <- '
+  # ================= MEASUREMENT MODEL =================
+  Anthro_Technology =~ IDAQ7 + IDAQ9 + IDAQ4 + IDAQ5 + IDAQ1
+  Anthro_Nature     =~ IDAQ15 + IDAQ10 + IDAQ6 + IDAQ12 + IDAQ2
+  Anthro_Animals    =~ IDAQ8 + IDAQ11 + IDAQ14 + IDAQ13 + IDAQ3
+  Intrinsic_Relig   =~ IR1 + IR2 + IR3
+
+  # ================= STRUCTURAL PATHS TO MEDIATORS =================
+  Anthro_Technology ~ a1 * Intrinsic_Relig
+  Anthro_Nature     ~ a2 * Intrinsic_Relig
+  Anthro_Animals    ~ a3 * Intrinsic_Relig
+  
+  # ================= PATHS TO POSITIVE PERCEPTIONS =================
+  RobotPositivePerceptions ~ b1pos * Anthro_Technology + 
+                             b2pos * Anthro_Nature + 
+                             b3pos * Anthro_Animals
+                             
+  # ================= PATHS TO COMPETENCE =================
+  RobotCompetencePerceptions ~ b1comp * Anthro_Technology + 
+                               b2comp * Anthro_Nature + 
+                               b3comp * Anthro_Animals
+  
+  # ================= INDIRECT EFFECTS (POSITIVE) =================
+  ind_tech_pos    := a1 * b1pos
+  ind_nature_pos  := a2 * b2pos
+  ind_animals_pos := a3 * b3pos
+  tot_ind_pos     := ind_tech_pos + ind_nature_pos + ind_animals_pos
+
+  # ================= INDIRECT EFFECTS (COMPETENCE) =================
+  ind_tech_comp    := a1 * b1comp
+  ind_nature_comp  := a2 * b2comp
+  ind_animals_comp := a3 * b3comp
+  tot_ind_comp     := ind_tech_comp + ind_nature_comp + ind_animals_comp
+  
+  # ================= COVARIANCES =================
+  Anthro_Technology ~~ Anthro_Nature
+  Anthro_Technology ~~ Anthro_Animals
+  Anthro_Nature     ~~ Anthro_Animals
+  
+  # Allow the two dependent variables to covary
+  RobotPositivePerceptions ~~ RobotCompetencePerceptions
+'
+
+# RUN MAIN SEM
+cat("Fitting SEM Model...\n")
+fit_sem <- sem(sem_model, data = data_all, estimator = "MLR", missing = "FIML")
+
+cat("\n--- Global Fit Indices ---\n")
+print(fitMeasures(fit_sem, c("chisq", "df", "pvalue", "cfi", "tli", "rmsea", "rmsea.ci.lower", "rmsea.ci.upper", "srmr")))
+
+cat("\n--- Standardized Parameter Estimates ---\n")
+std_sol <- standardizedSolution(fit_sem)
+print(std_sol[std_sol$op == "~", c("lhs", "op", "rhs", "est.std", "pvalue", "ci.lower", "ci.upper")])
+
+cat("\n--- Indirect Effects Summary ---\n")
+print(std_sol[std_sol$op == ":=", c("lhs", "est.std", "pvalue", "ci.lower", "ci.upper")])
+
+# GENERATE PATH DIAGRAM
+cat("\n--- Generating Path Diagram ---\n")
+semPaths(fit_sem, 
+         whatLabels = "std", 
+         layout = "tree", 
+         edge.label.cex = 0.9, 
+         curvePivot = TRUE,
+         rotation = 2,
+         nCharNodes = 0, 
+         sizeMan = 5,    
+         sizeLat = 8,    
+         title = TRUE, 
+         title.color = "black")
+
+# =============================================================================
+# 3. MULTI-GROUP SEM (INVARIANCE TESTING - GENDER ONLY)
+# =============================================================================
+
+cat("\n", rep("=", 70), sep="")
+cat("\nSECTION 3: MULTI-GROUP SEM & INVARIANCE TESTING")
+cat("\n", rep("=", 70), "\n", sep="")
+
+# MULTI-GROUP MODEL (NO LABELS, NO INDIRECT EFFECTS to avoid equality constraints)
+sem_model_mg <- '
+  Anthro_Technology =~ IDAQ7 + IDAQ9 + IDAQ4 + IDAQ5 + IDAQ1
+  Anthro_Nature     =~ IDAQ15 + IDAQ10 + IDAQ6 + IDAQ12 + IDAQ2
+  Anthro_Animals    =~ IDAQ8 + IDAQ11 + IDAQ14 + IDAQ13 + IDAQ3
+  Intrinsic_Relig   =~ IR1 + IR2 + IR3
+
+  Anthro_Technology ~ Intrinsic_Relig
+  Anthro_Nature     ~ Intrinsic_Relig
+  Anthro_Animals    ~ Intrinsic_Relig
+  
+  RobotPositivePerceptions ~ Anthro_Technology + Anthro_Nature + Anthro_Animals
+  RobotCompetencePerceptions ~ Anthro_Technology + Anthro_Nature + Anthro_Animals
+  
+  Anthro_Technology ~~ Anthro_Nature
+  Anthro_Technology ~~ Anthro_Animals
+  Anthro_Nature     ~~ Anthro_Animals
+  RobotPositivePerceptions ~~ RobotCompetencePerceptions
+'
+
+run_invariance_analysis <- function(grouping_var, label) {
+  
+  cat(paste0("\n\n>>> RUNNING INVARIANCE ANALYSIS FOR: ", label, " <<<\n"))
+  
+  # We use the raw variable or the created label variable depending on what exists
+  var_to_use <- ifelse(paste0(grouping_var, "_Label") %in% colnames(data_all), 
+                       paste0(grouping_var, "_Label"), 
+                       grouping_var)
+  
+  group_counts <- table(data_all[[var_to_use]])
+  print(group_counts)
+  
+  valid_groups <- names(group_counts[group_counts >= 50])
+  if(length(valid_groups) < length(group_counts)) {
+    cat("Note: Excluding groups with N < 50 from invariance testing to ensure model stability.\n")
+  }
+  
+  mg_data <- data_all[data_all[[var_to_use]] %in% valid_groups, ]
+  
+  if(length(unique(mg_data[[var_to_use]])) < 2) {
+    cat("Not enough valid groups left to run Multi-Group Analysis.\n")
+    return(NULL)
+  }
+  
+  fit_config <- sem(sem_model_mg, data = mg_data, group = var_to_use, 
+                    estimator = "MLR", missing = "FIML")
+  
+  fit_metric <- sem(sem_model_mg, data = mg_data, group = var_to_use, 
+                    estimator = "MLR", missing = "FIML", group.equal = "loadings")
+  
+  fit_scalar <- sem(sem_model_mg, data = mg_data, group = var_to_use, 
+                    estimator = "MLR", missing = "FIML", group.equal = c("loadings", "intercepts"))
+  
+  cat("\n--- Model Comparison (Delta Fit Indices) ---\n")
+  get_fit <- function(fit) {
+    if(!lavInspect(fit, "converged")) return(rep(NA, 4))
+    fitMeasures(fit, c("chisq", "df", "cfi", "rmsea"))
+  }
+  
+  fits <- rbind(Configural = get_fit(fit_config),
+                Metric     = get_fit(fit_metric),
+                Scalar     = get_fit(fit_scalar))
+  fits <- as.data.frame(fits)
+  
+  fits$Delta_CFI <- c(NA, fits$cfi[2] - fits$cfi[1], fits$cfi[3] - fits$cfi[2])
+  fits$Delta_RMSEA <- c(NA, fits$rmsea[2] - fits$rmsea[1], fits$rmsea[3] - fits$rmsea[2])
+  print(round(fits, 3))
+  cat("\nNote: |Delta CFI| <= 0.01 and |Delta RMSEA| <= 0.015 usually indicates invariance holds.\n")
+  
+  cat("\n--- Standardized Effects per Group (Configural Model) ---\n")
+  if(lavInspect(fit_config, "converged")) {
+    params <- standardizedSolution(fit_config)
+    reg_paths <- params[params$op == "~", c("group", "lhs", "rhs", "est.std", "pvalue", "ci.lower", "ci.upper")]
+    
+    group_labels <- lavInspect(fit_config, "group.label")
+    reg_paths$group_label <- group_labels[reg_paths$group]
+    print(reg_paths)
+  } else {
+    cat("Model did not converge, unable to extract path estimates.\n")
+  }
+}
+
+# --- EXECUTE MULTI-GROUP ---
+
+# Focus only on Gender as per meeting notes
+if("Gender" %in% colnames(data_all)) {
+  run_invariance_analysis("Gender", "Gender")
+}
+
+cat("\nAnalysis Complete.\n")
