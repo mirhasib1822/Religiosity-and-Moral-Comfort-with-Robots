@@ -6,8 +6,10 @@
 > 
 > # Set working directory where your CSV file is located
 > setwd("~/Downloads/Religiosity-and-Moral-Comfort-with-Robots/Analysis")
+> 
 > # Load the dataset
 > data_all <- read.csv("Study 6 Data.csv", stringsAsFactors = FALSE)
+> 
 > # Check required packages
 > required_packages <- c("psych", "lavaan", "semTools", "dplyr", "GPArotation", "semPlot")
 > new_packages <- required_packages[!(required_packages %in% installed.packages()[,"Package"])]
@@ -16,38 +18,10 @@
 > # Load libraries
 > library(psych)       # EFA & Descriptives
 > library(lavaan)      # SEM
-This is lavaan 0.6-20
-lavaan is FREE software! Please report any bugs.
-
-Attaching package: ‘lavaan’
-
-The following object is masked from ‘package:psych’:
-
-    cor2cov
 > library(semTools)    # Invariance & Validity
- 
-###############################################################################
-This is semTools 0.5-7
-All users of R (or SEM) are invited to submit functions or ideas for functions.
-###############################################################################
-
-Attaching package: ‘semTools’
-
-The following objects are masked from ‘package:psych’:
-
-    reliability, skew
 > library(dplyr)       # Data manipulation
-
-Attaching package: ‘dplyr’
-
-The following objects are masked from ‘package:stats’:
-
-    filter, lag
-
-The following objects are masked from ‘package:base’:
-
-    intersect, setdiff, setequal, union
 > library(semPlot)     # Path diagrams
+> 
 > # =============================================================================
 > # 0. DEMOGRAPHIC PROFILING & DATA PREPARATION
 > # =============================================================================
@@ -151,6 +125,7 @@ Married            1295      58.78
 Divorced            197       8.94
 Widowed             111       5.04
 <NA>                  4       0.18
+> 
 > # =============================================================================
 > # 1. EXPLORATORY FACTOR ANALYSIS (EFA)
 > # =============================================================================
@@ -226,7 +201,6 @@ Proportion Var 0.768
 
 --- EFA: Anthropomorphism (IDAQ) ---
 Parallel analysis suggests that the number of factors =  3  and the number of components =  NA 
-Loading required namespace: GPArotation
 Factor Analysis using method =  ml
 Call: fa(r = idaq_data, nfactors = 3, rotate = "oblimin", fm = "ml")
 Standardized loadings (pattern matrix) based upon correlation matrix
@@ -281,8 +255,69 @@ Measures of factor score adequacy
 Correlation of (regression) scores with factors   0.965 0.954 0.964
 Multiple R square of scores with factors          0.932 0.911 0.929
 Minimum correlation of possible factor scores     0.864 0.822 0.858
+> 
 > # =============================================================================
-> # 2. STRUCTURAL EQUATION MODEL (SEM)
+> # 2. CONFIRMATORY FACTOR ANALYSIS (CFA)
+> # =============================================================================
+> 
+> cat("\n", rep("=", 70), sep="")
+
+======================================================================> cat("\nSECTION 1.5: CONFIRMATORY FACTOR ANALYSIS (CFA) FOR ANTHROPOMORPHISM")
+
+SECTION 1.5: CONFIRMATORY FACTOR ANALYSIS (CFA) FOR ANTHROPOMORPHISM> cat("\n", rep("=", 70), "\n", sep="")
+
+======================================================================
+> 
+> # Define the 3-Factor Measurement Model for IDAQ
+> cfa_model <- '
++   Anthro_Technology =~ IDAQ7 + IDAQ9 + IDAQ4 + IDAQ5 + IDAQ1
++   Anthro_Nature     =~ IDAQ15 + IDAQ10 + IDAQ6 + IDAQ12 + IDAQ2
++   Anthro_Animals    =~ IDAQ8 + IDAQ11 + IDAQ14 + IDAQ13 + IDAQ3
++ '
+> 
+> # Run the CFA
+> cat("Fitting 3-Factor CFA Model...\n")
+Fitting 3-Factor CFA Model...
+> fit_cfa <- cfa(cfa_model, data = data_all, estimator = "MLR", missing = "FIML")
+Warning message:
+lavaan->lav_data_full():  
+   some cases are empty and will be ignored: 369. 
+> 
+> # Report the CFA Fit Indices
+> cat("\n--- CFA Model Fit Indices ---\n")
+
+--- CFA Model Fit Indices ---
+> print(fitMeasures(fit_cfa, c("chisq", "df", "pvalue", "cfi", "tli", "rmsea", "rmsea.ci.lower", "rmsea.ci.upper", "srmr")))
+         chisq             df         pvalue            cfi            tli          rmsea rmsea.ci.lower 
+       850.255         87.000          0.000          0.970          0.964          0.063          0.059 
+rmsea.ci.upper           srmr 
+         0.067          0.034 
+> 
+> # Extract Standardized Loadings to verify item strength
+> cat("\n--- CFA Standardized Factor Loadings ---\n")
+
+--- CFA Standardized Factor Loadings ---
+> cfa_sol <- standardizedSolution(fit_cfa)
+> print(cfa_sol[cfa_sol$op == "=~", c("lhs", "op", "rhs", "est.std", "pvalue")])
+                 lhs op    rhs est.std pvalue
+1  Anthro_Technology =~  IDAQ7   0.864      0
+2  Anthro_Technology =~  IDAQ9   0.843      0
+3  Anthro_Technology =~  IDAQ4   0.835      0
+4  Anthro_Technology =~  IDAQ5   0.811      0
+5  Anthro_Technology =~  IDAQ1   0.794      0
+6      Anthro_Nature =~ IDAQ15   0.824      0
+7      Anthro_Nature =~ IDAQ10   0.810      0
+8      Anthro_Nature =~  IDAQ6   0.822      0
+9      Anthro_Nature =~ IDAQ12   0.819      0
+10     Anthro_Nature =~  IDAQ2   0.779      0
+11    Anthro_Animals =~  IDAQ8   0.851      0
+12    Anthro_Animals =~ IDAQ11   0.823      0
+13    Anthro_Animals =~ IDAQ14   0.842      0
+14    Anthro_Animals =~ IDAQ13   0.809      0
+15    Anthro_Animals =~  IDAQ3   0.826      0
+> 
+> # =============================================================================
+> # 3. STRUCTURAL EQUATION MODEL (SEM)
 > # =============================================================================
 > 
 > cat("\n", rep("=", 70), sep="")
@@ -380,6 +415,7 @@ rmsea.ci.upper           srmr
 85  ind_nature_comp   0.001  0.482   -0.001    0.003
 86 ind_animals_comp  -0.012  0.354   -0.037    0.013
 87     tot_ind_comp   0.039  0.000    0.025    0.053
+> 
 > # GENERATE PATH DIAGRAM
 > cat("\n--- Generating Path Diagram ---\n")
 
@@ -395,8 +431,9 @@ rmsea.ci.upper           srmr
 +          sizeLat = 8,    
 +          title = TRUE, 
 +          title.color = "black")
+> 
 > # =============================================================================
-> # 3. MULTI-GROUP SEM (INVARIANCE TESTING - GENDER ONLY)
+> # 4. MULTI-GROUP SEM (INVARIANCE TESTING - GENDER ONLY)
 > # =============================================================================
 > 
 > cat("\n", rep("=", 70), sep="")
@@ -488,6 +525,7 @@ SECTION 3: MULTI-GROUP SEM & INVARIANCE TESTING> cat("\n", rep("=", 70), "\n", s
 +     cat("Model did not converge, unable to extract path estimates.\n")
 +   }
 + }
+> 
 > # --- EXECUTE MULTI-GROUP ---
 > 
 > # Focus only on Gender as per meeting notes
