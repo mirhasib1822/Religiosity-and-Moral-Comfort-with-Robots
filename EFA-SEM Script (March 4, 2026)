@@ -1,11 +1,11 @@
 # =============================================================================
-# REVISED ANALYSIS: RELIGIOSITY & ANTHROPOMORPHISM MODEL
-# Changes: Swapped Negative Perceptions for Positive & Competence Perceptions.
-# Added comprehensive demographic profiling. Focused invariance on Gender.
+# MASTER ANALYSIS SCRIPT: RELIGIOSITY & ANTHROPOMORPHISM MODEL
+# Includes: Demographics, EFA, CFA, SEM with 3 DVs (Negative, Positive, Competence),
+# and Multi-Group Invariance Testing for Gender.
 # =============================================================================
 
-# Set working directory where your CSV file is located
-setwd("~/Downloads/Religiosity-and-Moral-Comfort-with-Robots/Analysis")
+# Set working directory
+> data_all <- read.csv("Study 6 Data.csv", stringsAsFactors = FALSE)
 
 # Load the dataset
 data_all <- read.csv("Study 6 Data.csv", stringsAsFactors = FALSE)
@@ -17,7 +17,7 @@ if(length(new_packages)) install.packages(new_packages)
 
 # Load libraries
 library(psych)       # EFA & Descriptives
-library(lavaan)      # SEM
+library(lavaan)      # SEM & CFA
 library(semTools)    # Invariance & Validity
 library(dplyr)       # Data manipulation
 library(semPlot)     # Path diagrams
@@ -117,14 +117,43 @@ if(all(idaq_items %in% colnames(data_all))) {
 }
 
 # =============================================================================
-# 2. STRUCTURAL EQUATION MODEL (SEM)
+# 2. CONFIRMATORY FACTOR ANALYSIS (CFA)
 # =============================================================================
 
 cat("\n", rep("=", 70), sep="")
-cat("\nSECTION 2: STRUCTURAL EQUATION MODELING (Positive & Competence DVs)")
+cat("\nSECTION 2: CONFIRMATORY FACTOR ANALYSIS (CFA) FOR ANTHROPOMORPHISM")
 cat("\n", rep("=", 70), "\n", sep="")
 
-# MAIN MODEL WITH LABELS FOR MEDIATION
+# Define the 3-Factor Measurement Model for IDAQ
+cfa_model <- '
+  Anthro_Technology =~ IDAQ7 + IDAQ9 + IDAQ4 + IDAQ5 + IDAQ1
+  Anthro_Nature     =~ IDAQ15 + IDAQ10 + IDAQ6 + IDAQ12 + IDAQ2
+  Anthro_Animals    =~ IDAQ8 + IDAQ11 + IDAQ14 + IDAQ13 + IDAQ3
+'
+
+# Run the CFA
+cat("Fitting 3-Factor CFA Model...\n")
+fit_cfa <- cfa(cfa_model, data = data_all, estimator = "MLR", missing = "FIML")
+
+# Report the CFA Fit Indices
+cat("\n--- CFA Model Fit Indices ---\n")
+print(fitMeasures(fit_cfa, c("chisq", "df", "pvalue", "cfi", "tli", "rmsea", "rmsea.ci.lower", "rmsea.ci.upper", "srmr")))
+
+# Extract Standardized Loadings to verify item strength
+cat("\n--- CFA Standardized Factor Loadings ---\n")
+cfa_sol <- standardizedSolution(fit_cfa)
+print(cfa_sol[cfa_sol$op == "=~", c("lhs", "op", "rhs", "est.std", "pvalue")])
+
+
+# =============================================================================
+# 3. STRUCTURAL EQUATION MODEL (SEM) - THREE DVs
+# =============================================================================
+
+cat("\n", rep("=", 70), sep="")
+cat("\nSECTION 3: STRUCTURAL EQUATION MODELING (Negative, Positive, & Competence)")
+cat("\n", rep("=", 70), "\n", sep="")
+
+# MAIN MODEL WITH LABELS FOR MEDIATION ACROSS ALL THREE DVs
 sem_model <- '
   # ================= MEASUREMENT MODEL =================
   Anthro_Technology =~ IDAQ7 + IDAQ9 + IDAQ4 + IDAQ5 + IDAQ1
@@ -137,6 +166,11 @@ sem_model <- '
   Anthro_Nature     ~ a2 * Intrinsic_Relig
   Anthro_Animals    ~ a3 * Intrinsic_Relig
   
+  # ================= PATHS TO NEGATIVE PERCEPTIONS =================
+  RobotNegativePerceptions ~ b1neg * Anthro_Technology + 
+                             b2neg * Anthro_Nature + 
+                             b3neg * Anthro_Animals
+
   # ================= PATHS TO POSITIVE PERCEPTIONS =================
   RobotPositivePerceptions ~ b1pos * Anthro_Technology + 
                              b2pos * Anthro_Nature + 
@@ -146,7 +180,13 @@ sem_model <- '
   RobotCompetencePerceptions ~ b1comp * Anthro_Technology + 
                                b2comp * Anthro_Nature + 
                                b3comp * Anthro_Animals
-  
+                               
+  # ================= INDIRECT EFFECTS (NEGATIVE) =================
+  ind_tech_neg    := a1 * b1neg
+  ind_nature_neg  := a2 * b2neg
+  ind_animals_neg := a3 * b3neg
+  tot_ind_neg     := ind_tech_neg + ind_nature_neg + ind_animals_neg
+
   # ================= INDIRECT EFFECTS (POSITIVE) =================
   ind_tech_pos    := a1 * b1pos
   ind_nature_pos  := a2 * b2pos
@@ -160,16 +200,19 @@ sem_model <- '
   tot_ind_comp     := ind_tech_comp + ind_nature_comp + ind_animals_comp
   
   # ================= COVARIANCES =================
+  # Covariances between mediators
   Anthro_Technology ~~ Anthro_Nature
   Anthro_Technology ~~ Anthro_Animals
   Anthro_Nature     ~~ Anthro_Animals
   
-  # Allow the two dependent variables to covary
+  # Allow the three dependent variables to covary
+  RobotNegativePerceptions ~~ RobotPositivePerceptions
+  RobotNegativePerceptions ~~ RobotCompetencePerceptions
   RobotPositivePerceptions ~~ RobotCompetencePerceptions
 '
 
 # RUN MAIN SEM
-cat("Fitting SEM Model...\n")
+cat("Fitting Main SEM Model with 3 DVs...\n")
 fit_sem <- sem(sem_model, data = data_all, estimator = "MLR", missing = "FIML")
 
 cat("\n--- Global Fit Indices ---\n")
@@ -187,7 +230,7 @@ cat("\n--- Generating Path Diagram ---\n")
 semPaths(fit_sem, 
          whatLabels = "std", 
          layout = "tree", 
-         edge.label.cex = 0.9, 
+         edge.label.cex = 0.8, 
          curvePivot = TRUE,
          rotation = 2,
          nCharNodes = 0, 
@@ -197,11 +240,11 @@ semPaths(fit_sem,
          title.color = "black")
 
 # =============================================================================
-# 3. MULTI-GROUP SEM (INVARIANCE TESTING - GENDER ONLY)
+# 4. MULTI-GROUP SEM (INVARIANCE TESTING - GENDER ONLY)
 # =============================================================================
 
 cat("\n", rep("=", 70), sep="")
-cat("\nSECTION 3: MULTI-GROUP SEM & INVARIANCE TESTING")
+cat("\nSECTION 4: MULTI-GROUP SEM & INVARIANCE TESTING (GENDER)")
 cat("\n", rep("=", 70), "\n", sep="")
 
 # MULTI-GROUP MODEL (NO LABELS, NO INDIRECT EFFECTS to avoid equality constraints)
@@ -215,12 +258,16 @@ sem_model_mg <- '
   Anthro_Nature     ~ Intrinsic_Relig
   Anthro_Animals    ~ Intrinsic_Relig
   
-  RobotPositivePerceptions ~ Anthro_Technology + Anthro_Nature + Anthro_Animals
+  RobotNegativePerceptions   ~ Anthro_Technology + Anthro_Nature + Anthro_Animals
+  RobotPositivePerceptions   ~ Anthro_Technology + Anthro_Nature + Anthro_Animals
   RobotCompetencePerceptions ~ Anthro_Technology + Anthro_Nature + Anthro_Animals
   
   Anthro_Technology ~~ Anthro_Nature
   Anthro_Technology ~~ Anthro_Animals
   Anthro_Nature     ~~ Anthro_Animals
+  
+  RobotNegativePerceptions ~~ RobotPositivePerceptions
+  RobotNegativePerceptions ~~ RobotCompetencePerceptions
   RobotPositivePerceptions ~~ RobotCompetencePerceptions
 '
 
